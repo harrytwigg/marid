@@ -2841,7 +2841,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     }
     // A remote session's transcript is on its own host, so the read above found
     // nothing and there is no live stream either: ask that host.
-    if (transcriptPath && !result.error && result.contextTokens === undefined && isRemoteTarget(opts)) {
+    // (A confirmed /compact discards the figure below, so it is not read for one.)
+    if (transcriptPath && !result.error && !compactedBy && result.contextTokens === undefined && isRemoteTarget(opts)) {
       const remoteCtx = await readRemoteContextTokens(sshDestination(opts), transcriptPath);
       if (remoteCtx) result.contextTokens = remoteCtx;
     }

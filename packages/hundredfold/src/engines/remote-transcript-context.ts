@@ -1,6 +1,6 @@
 import path from "node:path";
 import { logger } from "../shared/logger.js";
-import { shq, sshRun, SSH_CONNECTION_FAILED } from "./remote-stage.js";
+import { shq, sshRun } from "./remote-stage.js";
 
 /**
  * The context meter's figure for a Claude session that runs on a remote host.
@@ -19,7 +19,8 @@ import { shq, sshRun, SSH_CONNECTION_FAILED } from "./remote-stage.js";
 
 /** How much of the end of the transcript to read. One assistant line can be large; the usage is at its end. */
 export const REMOTE_TRANSCRIPT_TAIL_BYTES = 1024 * 1024;
-const REMOTE_TAIL_TIMEOUT_MS = 20_000;
+/** A meter figure is not worth stalling a turn's settle on a flaky link for long. */
+const REMOTE_TAIL_TIMEOUT_MS = 6_000;
 
 /** The input-context size a usage record reports: input plus cache-read plus cache-creation tokens. */
 function contextTokensOfUsage(usage: Record<string, unknown>): number | undefined {
@@ -63,7 +64,7 @@ export async function readRemoteContextTokens(
   if (!command) return undefined;
   try {
     const res = await run(destination, [command], { timeoutMs: REMOTE_TAIL_TIMEOUT_MS });
-    if (res.code === SSH_CONNECTION_FAILED || res.code === null || res.code !== 0) {
+    if (res.code !== 0) {
       logger.debug(`Remote context read from ${destination} failed (exit ${res.code}): ${res.stderr.trim().slice(0, 200)}`);
       return undefined;
     }
