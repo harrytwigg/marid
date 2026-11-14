@@ -161,10 +161,10 @@ describe("a restart over a gateway that was running at an older build's home", (
 
     expect(settled.respawn).toBe(true);
     expect(env.ACME_HOME).toBe(currentHome());
-    expect(env.HUNDREDFOLD_HOME).toBe(currentHome());
-    expect(env.HUNDREDFOLD_HOME_IDENTITY).toBeUndefined();
+    expect(env[`${OLD.upper}_HOME`]).toBe(currentHome());
+    expect(env[`${OLD.upper}_HOME_IDENTITY`]).toBeUndefined();
     expect(env.ACME_HOME_IDENTITY).toBeUndefined();
-    expect(env.HUNDREDFOLD_BINDING_HOME).toBeUndefined();
+    expect(env[`${OLD.upper}_BINDING_HOME`]).toBeUndefined();
     expect(fs.existsSync(path.join(projectDir(currentHome()), "home-session.jsonl"))).toBe(true);
     // The helper that starts over has loaded the settled home: nothing more to do.
     expect((await settleBeforeRestart(env, currentHome(), deps)).respawn).toBe(false);

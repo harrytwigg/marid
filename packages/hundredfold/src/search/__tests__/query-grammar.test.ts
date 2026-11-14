@@ -20,7 +20,7 @@ describe("parseSearchQuery", () => {
     const parsed = parse("everything blocked on hundredfold-dev");
     expect(parsed.facets).toEqual([
       { kind: "status", value: "blocked", origin: "inferred", span: { start: 11, end: 18, text: "blocked" } },
-      { kind: "assignee", value: "hundredfold-dev", origin: "inferred", span: { start: 22, end: 30, text: "hundredfold-dev" } },
+      { kind: "assignee", value: "hundredfold-dev", origin: "inferred", span: { start: 22, end: 37, text: "hundredfold-dev" } },
     ]);
     // `everything` and `on` are connectives; ANDing them into the index is what
     // makes this query return nothing.
@@ -37,8 +37,8 @@ describe("parseSearchQuery", () => {
   it("commits explicit tokens as facets and consumes them from the free text", () => {
     const parsed = parse("@hundredfold-dev is:executing");
     expect(parsed.facets).toEqual([
-      { kind: "assignee", value: "hundredfold-dev", origin: "token", span: { start: 0, end: 9, text: "@hundredfold-dev" } },
-      { kind: "status", value: "executing", origin: "token", span: { start: 10, end: 22, text: "is:executing" } },
+      { kind: "assignee", value: "hundredfold-dev", origin: "token", span: { start: 0, end: 16, text: "@hundredfold-dev" } },
+      { kind: "status", value: "executing", origin: "token", span: { start: 17, end: 29, text: "is:executing" } },
     ]);
     expect(parsed.freeText).toBe("");
   });

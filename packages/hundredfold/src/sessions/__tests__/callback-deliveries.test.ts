@@ -1,3 +1,4 @@
+import { OLD } from "../../shared/legacy/names.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,12 +61,12 @@ function installExactChildDeliverySchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE callback_deliveries (
       id TEXT PRIMARY KEY,
-      parent_session_id TEXT NOT NULL CHECK (length(parent_session_id) > 0 AND parent_session_id = hundredfold_callback_identity(parent_session_id)),
-      child_session_id TEXT NOT NULL CHECK (length(child_session_id) > 0 AND child_session_id = hundredfold_callback_identity(child_session_id)),
-      attempt_token TEXT NOT NULL CHECK (length(attempt_token) > 0 AND attempt_token = hundredfold_callback_identity(attempt_token)),
-      terminal_outcome TEXT NOT NULL CHECK (length(terminal_outcome) > 0 AND terminal_outcome = hundredfold_callback_identity(terminal_outcome)),
+      parent_session_id TEXT NOT NULL CHECK (length(parent_session_id) > 0 AND parent_session_id = ${OLD.sqlFunctions.callbackIdentity}(parent_session_id)),
+      child_session_id TEXT NOT NULL CHECK (length(child_session_id) > 0 AND child_session_id = ${OLD.sqlFunctions.callbackIdentity}(child_session_id)),
+      attempt_token TEXT NOT NULL CHECK (length(attempt_token) > 0 AND attempt_token = ${OLD.sqlFunctions.callbackIdentity}(attempt_token)),
+      terminal_outcome TEXT NOT NULL CHECK (length(terminal_outcome) > 0 AND terminal_outcome = ${OLD.sqlFunctions.callbackIdentity}(terminal_outcome)),
       terminal_version INTEGER NOT NULL CHECK (terminal_version >= 1),
-      callback_kind TEXT NOT NULL CHECK (length(callback_kind) > 0 AND callback_kind = hundredfold_callback_identity(callback_kind)),
+      callback_kind TEXT NOT NULL CHECK (length(callback_kind) > 0 AND callback_kind = ${OLD.sqlFunctions.callbackIdentity}(callback_kind)),
       payload TEXT NOT NULL CHECK (
         json_valid(payload)
         AND json_type(payload) = 'object'
@@ -104,7 +105,7 @@ function openRegistryOwnedExactChildDeliverySchema(): Database.Database {
   fs.rmSync(sessionsDir, { recursive: true, force: true });
   fs.mkdirSync(sessionsDir, { recursive: true });
   const database = new Database(path.join(sessionsDir, "registry.db"));
-  database.function("hundredfold_callback_identity", { deterministic: true }, (value: unknown) => value);
+  database.function(OLD.sqlFunctions.callbackIdentity, { deterministic: true }, (value: unknown) => value);
   installExactChildDeliverySchema(database);
   return database;
 }
@@ -222,7 +223,7 @@ describe("callback delivery schema migration", () => {
 
   it("rolls back the child-specific schema and every original row on a forced mid-copy failure", () => {
     const database = new Database(":memory:");
-    database.function("hundredfold_callback_identity", { deterministic: true }, (value: unknown) => value);
+    database.function(OLD.sqlFunctions.callbackIdentity, { deterministic: true }, (value: unknown) => value);
     installExactChildDeliverySchema(database);
     database.exec(`
       INSERT INTO callback_deliveries (
@@ -280,12 +281,12 @@ describe("callback delivery schema migration", () => {
       DROP TABLE callback_deliveries;
       CREATE TABLE callback_deliveries (
         id TEXT PRIMARY KEY,
-        parent_session_id TEXT NOT NULL CHECK (length(parent_session_id) > 0 AND parent_session_id = hundredfold_callback_identity(parent_session_id)),
-        child_session_id TEXT NOT NULL CHECK (length(child_session_id) > 0 AND child_session_id = hundredfold_callback_identity(child_session_id)),
-        attempt_token TEXT NOT NULL CHECK (length(attempt_token) > 0 AND attempt_token = hundredfold_callback_identity(attempt_token)),
-        terminal_outcome TEXT NOT NULL CHECK (length(terminal_outcome) > 0 AND terminal_outcome = hundredfold_callback_identity(terminal_outcome)),
+        parent_session_id TEXT NOT NULL CHECK (length(parent_session_id) > 0 AND parent_session_id = ${OLD.sqlFunctions.callbackIdentity}(parent_session_id)),
+        child_session_id TEXT NOT NULL CHECK (length(child_session_id) > 0 AND child_session_id = ${OLD.sqlFunctions.callbackIdentity}(child_session_id)),
+        attempt_token TEXT NOT NULL CHECK (length(attempt_token) > 0 AND attempt_token = ${OLD.sqlFunctions.callbackIdentity}(attempt_token)),
+        terminal_outcome TEXT NOT NULL CHECK (length(terminal_outcome) > 0 AND terminal_outcome = ${OLD.sqlFunctions.callbackIdentity}(terminal_outcome)),
         terminal_version INTEGER NOT NULL CHECK (terminal_version >= 1),
-        callback_kind TEXT NOT NULL CHECK (length(callback_kind) > 0 AND callback_kind = hundredfold_callback_identity(callback_kind)),
+        callback_kind TEXT NOT NULL CHECK (length(callback_kind) > 0 AND callback_kind = ${OLD.sqlFunctions.callbackIdentity}(callback_kind)),
         payload TEXT NOT NULL CHECK (
           json_valid(payload)
           AND json_type(payload) = 'object'

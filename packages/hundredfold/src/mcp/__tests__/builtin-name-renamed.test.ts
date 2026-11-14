@@ -135,7 +135,7 @@ describe("engine config files under a per-instance name", () => {
     const configPath = path.join(tmp, "mcp_config.json");
     fs.writeFileSync(configPath, JSON.stringify({
       mcpServers: {
-        [OLD.codename]: { command: "stale", env: { [`${OLD.upper}_MCP_MANAGED_BY`]: "hundredfold-managed-antigravity" } },
+        [OLD.codename]: { command: "stale", env: { [`${OLD.upper}_MCP_MANAGED_BY`]: `${OLD.codename}-managed-antigravity` } },
         search: { command: "search-cli" },
       },
     }));

@@ -221,7 +221,7 @@ describe("leaving a home where it is", () => {
 describe("settling the environment", () => {
   it("rewrites an old home and instance name to the moved home, under every spelling", async () => {
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome(), [`${OLD.upper}_INSTANCE`]: "hundredfold-john" };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome(), [`${OLD.upper}_INSTANCE`]: `${OLD.codename}-john` };
     const outcome = await settleInstanceEnv(env, deps);
     expect(outcome.kind).toBe("moved");
     expect(env).toMatchObject({ ACME_HOME: currentHome(), [`${OLD.upper}_HOME`]: currentHome(), ACME_INSTANCE: "acme-john", [`${OLD.upper}_INSTANCE`]: "acme-john" });
@@ -237,7 +237,7 @@ describe("settling the environment", () => {
 
   it("points the environment at the old path when the home had to stay there", async () => {
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_INSTANCE`]: "hundredfold-john" };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_INSTANCE`]: `${OLD.codename}-john` };
     const home = vi.spyOn(os, "homedir").mockReturnValue(root);
     try {
       const outcome = await settleInstanceEnv(env, { ...deps, gatewayRunning: () => true });

@@ -122,10 +122,10 @@ describe("one identity per instance", () => {
   it("accepts a container's primary home under the old path and the old name", () => {
     const home = path.join(root, `.${OLD.codename}`);
     fs.mkdirSync(home);
-    const env = { [`${OLD.upper}_CONTAINER`]: "1", [`_${OLD.upper}_CONTAINER_SERVICE_START`]: "1", [`${OLD.upper}_CONTAINER_PRIMARY_HOME`]: home, [`${OLD.upper}_HOME`]: home, [`${OLD.upper}_INSTANCE`]: "hundredfold" };
+    const env = { [`${OLD.upper}_CONTAINER`]: "1", [`_${OLD.upper}_CONTAINER_SERVICE_START`]: "1", [`${OLD.upper}_CONTAINER_PRIMARY_HOME`]: home, [`${OLD.upper}_HOME`]: home, [`${OLD.upper}_INSTANCE`]: OLD.codename };
     expect(() => assertContainerPrimaryCommand("start", undefined, env)).not.toThrow();
     expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, [`${OLD.upper}_INSTANCE`]: "acme" })).not.toThrow();
-    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, [`${OLD.upper}_INSTANCE`]: "hundredfold-other" })).toThrow(/one Hundredfold instance/);
+    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, [`${OLD.upper}_INSTANCE`]: `${OLD.codename}-other` })).toThrow(/one Hundredfold instance/);
   });
 
   it("hints the pairing command by the current codename", () => {
