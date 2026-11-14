@@ -8,6 +8,14 @@ name: Project site
 on:
   push:
     branches: [main]
+    paths:
+      - site/**
+      - docs/**
+      - README.md
+      - assets/**
+      - packages/web/src/fonts/**
+      - pnpm-lock.yaml
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:

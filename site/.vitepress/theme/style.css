@@ -98,7 +98,6 @@ body {
 .VPSidebar { background-color: var(--hf-glass-chrome); }
 .VPContent.has-sidebar, .VPContent { background: transparent; }
 .VPDoc .container .content-container { max-width: 820px; }
-.vp-doc table { display: table; width: 100%; }
 .vp-doc table, .vp-doc tr, .vp-doc th, .vp-doc td { border-color: var(--hf-sep); }
 .vp-doc tr { background: transparent; }
 .vp-doc tr:nth-child(2n) { background: var(--vp-c-bg-soft); }
