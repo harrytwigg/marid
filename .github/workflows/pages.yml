@@ -1,0 +1,58 @@
+name: Project site
+
+# Builds site/ (VitePress; landing page plus the docs in docs/) and publishes it to
+# GitHub Pages. Needs Actions enabled on the repository and Settings > Pages >
+# Source set to "GitHub Actions". For a custom domain, set the repository variable
+# SITE_BASE to "/" and add the domain under Settings > Pages.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - docs/**
+      - README.md
+      - assets/**
+      - packages/web/src/fonts/**
+      - pnpm-lock.yaml
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let a running deploy finish rather than cancelling it half way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @hundredfold/site
+      - run: pnpm site:build
+        env:
+          SITE_BASE: ${{ vars.SITE_BASE }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
