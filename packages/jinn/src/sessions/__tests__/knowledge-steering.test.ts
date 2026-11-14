@@ -19,7 +19,7 @@ let buildContext: ContextMod["buildContext"];
 let ALWAYS_INCLUDE_FILE_CHAR_CAP: ContextMod["ALWAYS_INCLUDE_FILE_CHAR_CAP"];
 
 const LEGACY_MANIFEST =
-  "## Knowledge base\nSearch company knowledge in `knowledge/` + `docs/` with `search_knowledge`; `read_knowledge { path }` can read any relative file inside the Hundredfold instance.";
+  "## Knowledge base\nSearch company knowledge in `knowledge/` + `docs/` with `search_knowledge`; `read_knowledge { path }` can read any relative file inside the Jinn instance.";
 
 beforeAll(async () => {
   fs.mkdirSync(path.join(home, "knowledge"), { recursive: true });

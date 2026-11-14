@@ -1497,7 +1497,7 @@ export function ChatSidebar({
   const fixTitleCb = useCallback((title: string | undefined, employee: string | undefined) => {
     if (!title) return employee || portalName
     if (portalName !== LEGACY_PORTAL_NAME && title.startsWith(`${LEGACY_PORTAL_NAME} - `)) {
-      return portalName + title.slice(4)
+      return portalName + title.slice(LEGACY_PORTAL_NAME.length)
     }
     return title
   }, [portalName])

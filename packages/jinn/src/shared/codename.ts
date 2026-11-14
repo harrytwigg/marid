@@ -28,7 +28,7 @@ export interface Names {
   readonly codename: string;
   /** The env-variable prefix form: `JINN`. */
   readonly upper: string;
-  /** The display form that on-disk names use on macOS and Windows: `Hundredfold`. */
+  /** The display form that on-disk names use on macOS and Windows: `Jinn`. */
   readonly title: string;
   /** Whether this build's name differs from {@link LEGACY_CODENAME}, so aliases exist. */
   readonly renamed: boolean;

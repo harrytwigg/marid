@@ -4653,7 +4653,7 @@ export async function handleApiRequest(
       logger.info(`Onboarding: company configured=${companyName !== undefined}, portal name="${portalName}", operator="${operatorName}", language="${language}"`);
 
       // Partial posts (e.g. just an operator emoji) must not rewrite the manual:
-      // omitted fields would reset the name to "Hundredfold" and drop the language section.
+      // omitted fields would reset the name to its default and drop the language section.
       if (portalName !== undefined || language !== undefined) {
         personalizeOperatingManual(JINN_HOME, {
           portalName: updated.portal.portalName,

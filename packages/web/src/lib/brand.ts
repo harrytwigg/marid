@@ -1,4 +1,4 @@
-/** The product name users see. "Hundredfold" stays the internal codename (identifiers,
+/** The product name users see. "Jinn" stays the internal codename (identifiers,
  *  env vars, paths); only user-visible strings read from here. */
 export const PRODUCT_NAME = "Hundredfold"
 

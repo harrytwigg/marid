@@ -112,7 +112,7 @@ export function parseThreadOrigin(state: unknown): ThreadOrigin | null {
 
 /**
  * The back chip's label: the parent session's voice. Employee sessions read as
- * the employee's display-cased name ("jinn-dev" → "Hundredfold Dev"); direct sessions
+ * the employee's display-cased name ("jinn-dev" → "Jinn Dev"); direct sessions
  * belong to the portal persona (COO), so they read as the portal name.
  */
 export function threadOriginLabel(employee: string | null | undefined, portalName: string): string {
