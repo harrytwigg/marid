@@ -105,10 +105,10 @@ jobs:
           BASE: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
 
       # The whole tree, not the diff: the names the product had may stay only where
-      # scripts/rename-codename/rules.mjs says why. The flags go as the docs and the
+      # scripts/rename-codename/rules.mjs says why. The one flag left goes when the
       # install and publish names are renamed.
       - name: No old name outside the allowed places
-        run: node scripts/rename-codename.mjs --check --skip-docs --skip-distribution
+        run: node scripts/rename-codename.mjs --check --skip-distribution
 
   unit-tests:
     name: unit-tests (${{ matrix.os }})

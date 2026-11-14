@@ -61,6 +61,6 @@ test("a path moves with the package, and what a released bundle holds does not",
 })
 
 test("the repository has nothing left to rename outside the steps still to come", () => {
-  const out = execFileSync("node", ["scripts/rename-codename.mjs", "--check", "--skip-docs", "--skip-distribution"], { cwd: root, encoding: "utf8" })
+  const out = execFileSync("node", ["scripts/rename-codename.mjs", "--check", "--skip-distribution"], { cwd: root, encoding: "utf8" })
   assert.match(out, /clean/)
 })
