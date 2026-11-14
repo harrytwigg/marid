@@ -1,7 +1,7 @@
 /**
  * The runtime half of the two delivery modes in `.plans/plugins.md` §4.
  *
- * A bundled plugin resolves `@jinn/plugin-sdk` through the Vite alias. A disk
+ * A bundled plugin resolves `@hundredfold/plugin-sdk` through the Vite alias. A disk
  * `client.js` writes the same specifier and has to land on the same object, so
  * the loader installs the live namespaces on globals and rewrites the specifier
  * to a shim module that reads them back off `globalThis`. React is the
@@ -22,9 +22,9 @@ const SDK_SPECIFIERS = pluginSdkSpecifiers()
 /** The specifiers a plugin may import, each with the global its shim
  *  reads. Membership is the allowlist the loader rejects against. */
 const SDK_GLOBALS: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(SDK_SPECIFIERS.map((specifier) => [specifier, '__JINN_PLUGIN_SDK__'])),
-  react: '__JINN_REACT__',
-  'react/jsx-runtime': '__JINN_REACT_JSX__',
+  ...Object.fromEntries(SDK_SPECIFIERS.map((specifier) => [specifier, '__HUNDREDFOLD_PLUGIN_SDK__'])),
+  react: '__HUNDREDFOLD_REACT__',
+  'react/jsx-runtime': '__HUNDREDFOLD_REACT_JSX__',
 }
 
 type SdkSpecifier = string
@@ -46,11 +46,11 @@ const BINDING_NAME = /^[A-Za-z_$][\w$]*$/
 
 /** Install the app's own instances where the shims read them. Idempotent. */
 export async function installPluginSdk(): Promise<void> {
-  // The alias, not the relative path: a broken `@jinn/plugin-sdk` mapping
+  // The alias, not the relative path: a broken `@hundredfold/plugin-sdk` mapping
   // must fail this app build rather than a stranger's first plugin load.
   // Dynamic so the barrel (Select, Menu, the floating layer) stays off
   // the first paint of a dashboard whose plugins directory is empty.
-  const sdk = namespaces ? null : await import('@jinn/plugin-sdk')
+  const sdk = namespaces ? null : await import('@hundredfold/plugin-sdk')
   namespaces ??= {
     ...Object.fromEntries(SDK_SPECIFIERS.map((specifier) => [specifier, sdk as object])),
     react: React,

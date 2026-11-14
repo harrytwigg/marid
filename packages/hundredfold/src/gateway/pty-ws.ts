@@ -1,0 +1,293 @@
+import type { WebSocket } from "ws";
+import type { PtyControlEvent, PtyIdleSpawnOpts, PtyViewEngine } from "../engines/pty-view-engine.js";
+import { getEngineSessionRef, getSession } from "../sessions/registry.js";
+import { orgRegistry } from "./org-registry.js";
+import { sessionClaudeProfile, sessionRemoteTarget } from "../sessions/session-account.js";
+import { remoteScopeFor, spawnCwd } from "../sessions/session-cwd.js";
+import { localScopedClaudeRefusal } from "../sessions/turn/scoped-turn.js";
+import { logger } from "../shared/logger.js";
+import type { HundredfoldConfig } from "../shared/types.js";
+import { RAW_KEY_INPUTS, validGeometry } from "./pty-ws-input.js";
+
+/** Largest `input` frame accepted. The web client chunks a bigger paste below
+ *  this, so a frame over it is a misbehaving client, not a long paste. */
+export const PTY_INPUT_MAX_CHARS = 64 * 1024;
+export const PTY_RESUME_DEADLINE_MS = 15_000;
+
+interface AttachPtyWebSocketOptions {
+  resumeDeadlineMs?: number;
+  /** The live instance config, read through a getter so a hot reload is seen.
+   *
+   *  Load-bearing for remote employees, not a convenience: `scanOrg` refuses to
+   *  load an employee whose `remoteHost` has no `remote` config block behind it,
+   *  so asking the registry WITHOUT the config silently drops every remote
+   *  employee. The idle spawn would then see a local target and start `claude`
+   *  on the gateway — and adopt it as the warm PTY, so the next real turn pastes
+   *  its prompt into that local process. Exactly the failure the remote branch
+   *  below exists to prevent, arriving through the roster instead. */
+  getConfig?: () => HundredfoldConfig;
+}
+
+/** Attach a snapshot-first, per-session PTY WebSocket. */
+export function attachPtyWebSocket(
+  ws: WebSocket,
+  sessionId: string,
+  engine: PtyViewEngine,
+  options: AttachPtyWebSocketOptions = {},
+): void {
+  let disconnected = false;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let resumeTimer: ReturnType<typeof setTimeout> | undefined;
+  let terminalReady = false;
+  let lastGeometry: { cols: number; rows: number } | undefined;
+  const resumeDeadlineMs = options.resumeDeadlineMs ?? PTY_RESUME_DEADLINE_MS;
+
+  const sendControl = (event: PtyControlEvent) => {
+    if (ws.readyState !== ws.OPEN) return;
+    try { ws.send(JSON.stringify(event)); } catch { /* disconnected mid-send */ }
+  };
+
+  const clearResumeDeadline = () => {
+    if (!resumeTimer) return;
+    clearTimeout(resumeTimer);
+    resumeTimer = undefined;
+  };
+
+  const armResumeDeadline = () => {
+    clearResumeDeadline();
+    resumeTimer = setTimeout(() => {
+      resumeTimer = undefined;
+      if (disconnected || terminalReady) return;
+      sendControl({
+        type: "error",
+        message: "Terminal did not resume in time.",
+        recoverable: true,
+      });
+    }, resumeDeadlineMs);
+    resumeTimer.unref?.();
+  };
+
+  const handleControl = (event: PtyControlEvent) => {
+    if (event.type === "ready") {
+      terminalReady = true;
+      clearResumeDeadline();
+    } else if (event.type === "restoring") {
+      terminalReady = false;
+      const restoreViewing = didEnter || pendingViewing === true;
+      didEnter = false;
+      entryReady = false;
+      pendingViewing = null;
+      if (restoreViewing) queueMicrotask(() => applyViewingWhenReady(true));
+      armResumeDeadline();
+    } else if (event.type === "error" || event.type === "exited") {
+      terminalReady = false;
+      clearResumeDeadline();
+    }
+    sendControl(event);
+    // A not-recoverable error means the terminal itself is gone (e.g. its
+    // session was deleted) — nothing this socket sends from here
+    // can do anything, so close it rather than leave a dead-end connection
+    // for the client to keep retrying against.
+    if (event.type === "error" && !event.recoverable) {
+      try { ws.close(); } catch { /* already closed */ }
+    }
+  };
+
+  // The manager synchronously registers a paused subscriber and captures an
+  // exact sequence boundary. No live callback is released until start().
+  const subscription = engine.subscribeWithSnapshot(
+    sessionId,
+    (data) => { if (ws.readyState === ws.OPEN) ws.send(data); },
+    handleControl,
+  );
+
+  void subscription.snapshot.then((initial) => {
+    if (disconnected || ws.readyState !== ws.OPEN) return;
+    sendControl({ type: "reset" });
+    if (initial.snapshot) sendControl({ type: "snapshot", snapshot: initial.snapshot });
+    if (initial.ready) {
+      terminalReady = true;
+      sendControl({ type: "ready" });
+    } else {
+      terminalReady = false;
+      sendControl({ type: "restoring" });
+    }
+    // Events after the captured boundary can only flow after all framing above.
+    subscription.start();
+  }).catch((error) => {
+    sendControl({
+      type: "error",
+      message: `failed to restore terminal snapshot: ${error instanceof Error ? error.message : String(error)}`,
+      recoverable: true,
+    });
+    subscription.start();
+  });
+
+  const idleSpawnOpts = (cols: number, rows: number): PtyIdleSpawnOpts => {
+    const session = getSession(sessionId);
+    // The employee's remote target has to reach the idle spawn too. Without it
+    // this path spawns claude on the GATEWAY and the engine adopts it as the
+    // session's warm PTY, so the next real turn pastes into a local process —
+    // a remote employee silently running here, looking entirely normal in the UI.
+    const employee = session?.employee
+      ? orgRegistry(options.getConfig?.()).get(session.employee)
+      : undefined;
+    const remote = sessionRemoteTarget(employee, remoteScopeFor(options.getConfig?.()?.remote, session), session);
+    const refused = session && !remote ? localScopedClaudeRefusal(session) : null; // the PTY runs the PATH claude
+    if (refused) throw new Error(refused);
+    return {
+      engineSessionId: session ? getEngineSessionRef(session).id : undefined,
+      model: session?.model ?? undefined,
+      effortLevel: session?.effortLevel ?? undefined,
+      cwd: spawnCwd(session, Boolean(remote)),
+      ...remote,
+      claudeProfile: sessionClaudeProfile(session, employee),
+      cols,
+      rows,
+    };
+  };
+
+  const spawnIfNeeded = (cols: number, rows: number): boolean => {
+    try {
+      engine.ensureIdleSpawn(sessionId, idleSpawnOpts(cols, rows));
+      return true;
+    } catch (error) {
+      const message = `failed to start terminal: ${error instanceof Error ? error.message : String(error)}`;
+      logger.warn(`PTY websocket for ${sessionId}: ${message}`);
+      sendControl({ type: "error", message, recoverable: true });
+      return false;
+    }
+  };
+
+  let didEnter = false;
+  let pendingViewing: boolean | null = null;
+  let entryReady = false;
+
+  const applyViewing = (viewing: boolean) => {
+    if (disconnected) return;
+    if (viewing && !didEnter) {
+      engine.setViewing(sessionId, true);
+      didEnter = true;
+    } else if (!viewing && didEnter) {
+      engine.setViewing(sessionId, false);
+      didEnter = false;
+    }
+  };
+
+  const applyViewingWhenReady = (viewing: boolean, attempts = 20) => {
+    if (disconnected) return;
+    if (engine.hasWarmPty(sessionId)) {
+      entryReady = true;
+      applyViewing(viewing);
+      return;
+    }
+    if (attempts <= 0) {
+      pendingViewing = viewing;
+      entryReady = false;
+      return;
+    }
+    retryTimer = setTimeout(() => applyViewingWhenReady(viewing, attempts - 1), 100);
+    retryTimer.unref?.();
+  };
+
+  ws.on("message", (raw) => {
+    let message: any;
+    try { message = JSON.parse(raw.toString()); } catch { return; }
+    if (message?.type === "stdin" && typeof message.data === "string") {
+      engine.writeStdin(sessionId, message.data);
+    } else if (message?.type === "key" && typeof message.data === "string") {
+      if (RAW_KEY_INPUTS.has(message.data)) engine.writeRaw(sessionId, message.data);
+    } else if (message?.type === "input" && typeof message.data === "string") {
+      // The interactive terminal: keystrokes, mouse reports and pastes exactly
+      // as xterm encoded them, written to the PTY unchanged. No wider trust than
+      // `stdin` above — the upgrade already admitted only the operator. The web
+      // client strips xterm's own replies to terminal queries before sending,
+      // so what arrives here is what the operator did.
+      const data = message.data;
+      if (data && data.length <= PTY_INPUT_MAX_CHARS) engine.writeRaw(sessionId, data);
+    } else if (message?.type === "resize" && validGeometry(message.cols, message.rows)) {
+      const cols = Math.floor(message.cols);
+      const rows = Math.floor(message.rows);
+      lastGeometry = { cols, rows };
+      // An exited shell stays exited: a resize (a reload, a grid re-layout, a
+      // second tab) must not quietly respawn it and re-run its login.
+      const exitNotice = engine.exitNotice?.(sessionId);
+      if (exitNotice) {
+        clearResumeDeadline();
+        sendControl(exitNotice);
+        return;
+      }
+      const hadWarmPty = engine.hasWarmPty(sessionId);
+      if (!spawnIfNeeded(cols, rows)) return;
+      try {
+        engine.resizePty(sessionId, cols, rows);
+      } catch (error) {
+        const detail = `failed to resize terminal: ${error instanceof Error ? error.message : String(error)}`;
+        sendControl({ type: "error", message: detail, recoverable: true });
+        return;
+      }
+      if (!terminalReady) armResumeDeadline();
+      if (!entryReady && hadWarmPty) {
+        entryReady = true;
+        if (pendingViewing !== null) {
+          applyViewing(pendingViewing);
+          pendingViewing = null;
+        }
+      } else if (!entryReady && pendingViewing !== null) {
+        const viewing = pendingViewing;
+        pendingViewing = null;
+        applyViewingWhenReady(viewing);
+      }
+    } else if (message?.type === "restart") {
+      const geometry = lastGeometry;
+      if (!geometry) {
+        sendControl({ type: "error", message: "Terminal geometry is not ready yet.", recoverable: true });
+        return;
+      }
+      const entered = { didEnter, entryReady, pendingViewing, terminalReady };
+      terminalReady = false;
+      sendControl({ type: "restoring" });
+      const restoreViewing = didEnter || pendingViewing === true;
+      didEnter = false;
+      entryReady = false;
+      pendingViewing = null;
+      try {
+        engine.restartPty(sessionId, idleSpawnOpts(geometry.cols, geometry.rows));
+        armResumeDeadline();
+        if (restoreViewing) applyViewingWhenReady(true);
+      } catch (error) {
+        if (engine.hasWarmPty(sessionId)) {
+          // A restart refused before the kill (an engine may refuse one mid-turn) leaves the terminal as it was, this socket still counted as viewing it.
+          ({ didEnter, entryReady, pendingViewing, terminalReady } = entered);
+        } else {
+          // The old PTY is gone and its viewer entry went with it, so there is nothing to restore: stay not entered and queue the viewing, which the next spawn (a resize or another restart) applies.
+          clearResumeDeadline();
+          pendingViewing = restoreViewing ? true : null;
+        }
+        sendControl({
+          type: "error",
+          message: `failed to restart terminal: ${error instanceof Error ? error.message : String(error)}`,
+          recoverable: true,
+        });
+      }
+    } else if (message?.type === "viewing" && typeof message.viewing === "boolean") {
+      if (!entryReady) pendingViewing = message.viewing;
+      else applyViewing(message.viewing);
+    }
+  });
+
+  const onDisconnect = () => {
+    if (disconnected) return;
+    disconnected = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    clearResumeDeadline();
+    pendingViewing = null;
+    subscription.unsubscribe();
+    if (didEnter) {
+      engine.setViewing(sessionId, false);
+      didEnter = false;
+    }
+  };
+  ws.on("close", onDisconnect);
+  ws.on("error", onDisconnect);
+}

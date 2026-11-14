@@ -1,4 +1,4 @@
-import type { GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEventListener } from '@hundredfold/gateway-events'
 import { MobileWorkingSetNav } from './mobile-working-set-nav'
 import { useMobileWorkingSetActivity } from './mobile-working-set-activity'
 

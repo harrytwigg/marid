@@ -42,7 +42,7 @@ function useDraftAcknowledgment(owner: RefObject<DraftOwner>, updateValue: Dispa
 }
 
 function draftScope(): string {
-  return `jinn-chat-draft:${gatewayTransport().profile.origin}:`
+  return `hundredfold-chat-draft:${gatewayTransport().profile.origin}:`
 }
 
 /** Drops the draft of a new chat tab that left the layout (closed, evicted): its id may be minted again. */

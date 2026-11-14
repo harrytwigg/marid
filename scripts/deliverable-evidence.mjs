@@ -26,7 +26,7 @@ import { createHash } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 
-const MANIFEST_DEFAULT = ".jinn-build/deliverable-evidence.json"
+const MANIFEST_DEFAULT = ".hundredfold-build/deliverable-evidence.json"
 const SHA256 = /^[0-9a-f]{64}$/
 
 /** A false workspace declaration exits distinctly from `fail`, because the
@@ -38,7 +38,7 @@ const ROUTE_MISMATCH_EXIT = 2
  *  shipping ones: a denylist would make every top-level directory added later
  *  silently non-shipping, which is the exact failure this check exists to
  *  prevent. Everything outside these prefixes ships. */
-const NON_SHIPPING_PREFIXES = ["docs/", ".jinn-build/"]
+const NON_SHIPPING_PREFIXES = ["docs/", ".hundredfold-build/"]
 
 /** A git status letter and the score behind it: git scores a rename or copy always, a rewrite at
  *  its option, and nothing else, and the score is a percentage of 000-100. Read as valid on any

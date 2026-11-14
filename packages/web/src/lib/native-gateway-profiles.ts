@@ -1,4 +1,4 @@
-import type { JinnNativeBridge } from "@/platform/native-bridge"
+import type { HundredfoldNativeBridge } from "@/platform/native-bridge"
 import {
   GATEWAY_SOCKET_CLOSED,
   type GatewaySocketConnection,
@@ -34,7 +34,7 @@ export interface NativeGatewayProfilesSnapshot {
 }
 
 interface NativeGatewayProfilesOptions {
-  bridge: JinnNativeBridge
+  bridge: HundredfoldNativeBridge
   storage: Storage
   beforeCommit?: () => void | Promise<void>
 }

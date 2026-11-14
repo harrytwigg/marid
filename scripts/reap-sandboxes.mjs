@@ -66,7 +66,7 @@ function parseArgs(argv) {
 }
 
 function psDump(env) {
-  if (env.JINN_REAP_PS_SOURCE) return fs.readFileSync(env.JINN_REAP_PS_SOURCE, "utf8")
+  if (env.HUNDREDFOLD_REAP_PS_SOURCE) return fs.readFileSync(env.HUNDREDFOLD_REAP_PS_SOURCE, "utf8")
   return execFileSync("/bin/ps", ["-eo", "pid=,ppid=,etime=,rss=,args="], {
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,

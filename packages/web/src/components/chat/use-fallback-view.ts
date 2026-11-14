@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEventListener } from '@hundredfold/gateway-events'
 import { api } from '@/lib/api'
 import {
   parseFallbackView,

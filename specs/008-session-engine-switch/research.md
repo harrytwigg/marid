@@ -1,6 +1,6 @@
 # Research: Engine and Profile Switching for a Chat
 
-`G/` = `packages/jinn/src/`, `W/` = `packages/web/src/`. Lines as of `origin/main` `f5334300`;
+`G/` = `packages/hundredfold/src/`, `W/` = `packages/web/src/`. Lines as of `origin/main` `f5334300`;
 plan.md's table is the full index.
 
 ## R1. Knowing whether a native compaction worked

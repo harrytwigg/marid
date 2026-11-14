@@ -41,7 +41,7 @@ import {
   type LiveBlockArrival,
 } from '@/lib/blocks'
 import { beginSendMessages, clearPendingSend, markSendFailed } from '@/components/chat/message-send-state'
-import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 
 /** After a reconnect, if a turn is still 'loading' but no delta has arrived for
  *  this long, assume the session:completed frame was dropped and reconcile from

@@ -27,7 +27,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const apply = useCallback((t: ThemeId) => {
     setThemeState(t)
-    localStorage.setItem('jinn-theme', t)
+    localStorage.setItem('hundredfold-theme', t)
     const el = document.documentElement
     el.removeAttribute('data-theme')
     if (t === 'system') {
@@ -40,7 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const saved = localStorage.getItem('jinn-theme')
+    const saved = localStorage.getItem('hundredfold-theme')
     // Coerce stale ids from removed themes (glass/atelier/…) to a valid one.
     const valid = saved && THEMES.some((t) => t.id === saved) ? (saved as ThemeId) : 'dark'
     apply(valid)
@@ -50,7 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     function handleChange() {
-      const current = localStorage.getItem('jinn-theme') as ThemeId | null
+      const current = localStorage.getItem('hundredfold-theme') as ThemeId | null
       if (current === 'system') {
         const el = document.documentElement
         el.setAttribute('data-theme', mq.matches ? 'dark' : 'light')

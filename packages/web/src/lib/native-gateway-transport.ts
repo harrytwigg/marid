@@ -1,4 +1,4 @@
-import type { JinnNativeBridge, NativeStreamEvent } from "@/platform/native-bridge"
+import type { HundredfoldNativeBridge, NativeStreamEvent } from "@/platform/native-bridge"
 import {
   GATEWAY_SOCKET_CLOSED,
   GATEWAY_SOCKET_CLOSING,
@@ -71,7 +71,7 @@ class NativeGatewaySocket implements GatewaySocketConnection {
   #streamId: string | undefined
   #closed = false
 
-  constructor(private readonly bridge: JinnNativeBridge, origin: string, path: string) {
+  constructor(private readonly bridge: HundredfoldNativeBridge, origin: string, path: string) {
     void bridge.stream({ action: "open", target: { origin }, path }, (event) => this.#receive(event))
       .then(({ streamId }) => {
         this.#streamId = streamId
@@ -157,7 +157,7 @@ class NativeGatewaySocket implements GatewaySocketConnection {
   }
 }
 
-export function createNativeGatewayTransport(originInput: string, bridge: JinnNativeBridge): GatewayTransport {
+export function createNativeGatewayTransport(originInput: string, bridge: HundredfoldNativeBridge): GatewayTransport {
   const origin = gatewayOrigin(originInput)
   const httpUrl = (path: string) => new URL(gatewayPath(path), `${origin}/`).toString()
   return {
@@ -200,6 +200,6 @@ export function createNativeGatewayTransport(originInput: string, bridge: JinnNa
   }
 }
 
-export function pairNativeGateway(origin: string, code: string, bridge: JinnNativeBridge) {
+export function pairNativeGateway(origin: string, code: string, bridge: HundredfoldNativeBridge) {
   return bridge.pair({ target: { origin: gatewayOrigin(origin) }, code })
 }

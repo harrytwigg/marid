@@ -246,12 +246,12 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Compared with Jinn',
-        items: [{ text: 'Hundredfold and Jinn', link: '/marid-vs-jinn' }],
+        text: 'Compared with Hundredfold',
+        items: [{ text: 'Hundredfold and upstream', link: '/hundredfold-vs-upstream' }],
       },
     ],
     footer: {
-      message: 'Built on <a href="https://github.com/hristo2612/jinn">Jinn</a> by hristo2612 and contributors (MIT).',
+      message: 'A fork of an MIT-licensed project; see <a href="https://github.com/hundredfoldhq/hundredfold/blob/main/NOTICE">NOTICE</a> for the credit.',
     },
   },
 })

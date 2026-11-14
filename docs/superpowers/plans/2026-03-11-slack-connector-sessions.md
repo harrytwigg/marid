@@ -17,8 +17,8 @@
 ### Task 1: Update `deriveSessionKey` and tests
 
 **Files:**
-- Modify: `packages/jinn/src/connectors/slack/threads.ts`
-- Modify: `packages/jinn/src/connectors/slack/threads.test.ts`
+- Modify: `packages/hundredfold/src/connectors/slack/threads.ts`
+- Modify: `packages/hundredfold/src/connectors/slack/threads.test.ts`
 
 - [ ] **Step 1: Update tests for new session key behavior**
 
@@ -29,7 +29,7 @@ Replace the existing test file content. The key changes:
 - DMs unchanged
 
 ```typescript
-// packages/jinn/src/connectors/slack/threads.test.ts
+// packages/hundredfold/src/connectors/slack/threads.test.ts
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildReplyContext, deriveSessionKey, isOldSlackMessage } from "./threads.js";
@@ -121,13 +121,13 @@ test("isOldSlackMessage compares against boot time", () => {
 
 - [ ] **Step 2: Run tests - verify new tests fail**
 
-Run: `cd <repo> && npx tsx --test packages/jinn/src/connectors/slack/threads.test.ts`
+Run: `cd <repo> && npx tsx --test packages/hundredfold/src/connectors/slack/threads.test.ts`
 Expected: Several test failures (root key format, buildReplyContext for roots)
 
 - [ ] **Step 3: Update `deriveSessionKey` and `buildReplyContext`**
 
 ```typescript
-// packages/jinn/src/connectors/slack/threads.ts
+// packages/hundredfold/src/connectors/slack/threads.ts
 import type { ReplyContext } from "../../shared/types.js";
 
 export interface SlackMessageEventLike {
@@ -188,12 +188,12 @@ Note: Removed `SlackThreadOptions` interface and `shareSessionInChannel` paramet
 
 - [ ] **Step 4: Run tests - verify all pass**
 
-Run: `cd <repo> && npx tsx --test packages/jinn/src/connectors/slack/threads.test.ts`
+Run: `cd <repo> && npx tsx --test packages/hundredfold/src/connectors/slack/threads.test.ts`
 Expected: All 8 tests pass
 
 - [ ] **Step 5: Update SlackConnector to remove `shareSessionInChannel`**
 
-In `packages/jinn/src/connectors/slack/index.ts`:
+In `packages/hundredfold/src/connectors/slack/index.ts`:
 
 1. Remove the `private readonly shareSessionInChannel: boolean;` property
 2. Remove `this.shareSessionInChannel = !!config.shareSessionInChannel;` from constructor
@@ -201,7 +201,7 @@ In `packages/jinn/src/connectors/slack/index.ts`:
 
 - [ ] **Step 6: Remove `shareSessionInChannel` from types**
 
-In `packages/jinn/src/shared/types.ts`, remove `shareSessionInChannel?: boolean;` from `SlackConnectorConfig` (line 223).
+In `packages/hundredfold/src/shared/types.ts`, remove `shareSessionInChannel?: boolean;` from `SlackConnectorConfig` (line 223).
 
 - [ ] **Step 7: Run full build and tests**
 
@@ -212,7 +212,7 @@ Expected: No type errors, all tests pass
 
 ```bash
 cd <repo>
-git add packages/jinn/src/connectors/slack/threads.ts packages/jinn/src/connectors/slack/threads.test.ts packages/jinn/src/connectors/slack/index.ts packages/jinn/src/shared/types.ts
+git add packages/hundredfold/src/connectors/slack/threads.ts packages/hundredfold/src/connectors/slack/threads.test.ts packages/hundredfold/src/connectors/slack/index.ts packages/hundredfold/src/shared/types.ts
 git commit -m "fix: per-message session keys for Slack thread continuity
 
 Each root channel message now gets its own session key (slack:{channel}:{ts})
@@ -228,13 +228,13 @@ Root messages now set thread in replyContext so bot replies create threads."
 ### Task 2: Add channel name cache and resolution
 
 **Files:**
-- Modify: `packages/jinn/src/connectors/slack/index.ts`
-- Modify: `packages/jinn/src/sessions/context.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
+- Modify: `packages/hundredfold/src/connectors/slack/index.ts`
+- Modify: `packages/hundredfold/src/sessions/context.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
 
 - [ ] **Step 1: Add `channelNameCache` and `resolveChannelName` to SlackConnector**
 
-In `packages/jinn/src/connectors/slack/index.ts`, add after the `private lastError` property:
+In `packages/hundredfold/src/connectors/slack/index.ts`, add after the `private lastError` property:
 
 ```typescript
 private channelNameCache = new Map<string, { name: string; cachedAt: number }>();
@@ -284,7 +284,7 @@ transportMeta: {
 
 - [ ] **Step 3: Thread `channelName` through context builder**
 
-In `packages/jinn/src/sessions/context.ts`, update the `buildSessionContext` function's opts type and body:
+In `packages/hundredfold/src/sessions/context.ts`, update the `buildSessionContext` function's opts type and body:
 
 ```typescript
 function buildSessionContext(opts: {
@@ -307,7 +307,7 @@ function buildSessionContext(opts: {
   }
   if (opts.thread) ctx += `- Thread: ${opts.thread}\n`;
   ctx += `- User: ${opts.user}\n`;
-  ctx += `- Working directory: ${JINN_HOME}`;
+  ctx += `- Working directory: ${HUNDREDFOLD_HOME}`;
   return ctx;
 }
 ```
@@ -326,7 +326,7 @@ And add `channelName?: string` to the `buildContext` function's opts type (line 
 
 - [ ] **Step 4: Pass `channelName` from session manager**
 
-In `packages/jinn/src/sessions/manager.ts`, in the `runSession` method, update the `buildContext` call (around line 157):
+In `packages/hundredfold/src/sessions/manager.ts`, in the `runSession` method, update the `buildContext` call (around line 157):
 
 ```typescript
 const systemPrompt = buildContext({
@@ -351,7 +351,7 @@ Expected: No type errors, all tests pass
 
 ```bash
 cd <repo>
-git add packages/jinn/src/connectors/slack/index.ts packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/manager.ts
+git add packages/hundredfold/src/connectors/slack/index.ts packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/manager.ts
 git commit -m "feat: resolve Slack channel names for agent context
 
 Agents now see '#general (C0ABC123XYZ)' instead of raw channel IDs.
@@ -366,7 +366,7 @@ DMs show 'Direct Message' in context."
 ### Task 3: Add `reaction_added` event handler
 
 **Files:**
-- Modify: `packages/jinn/src/connectors/slack/index.ts`
+- Modify: `packages/hundredfold/src/connectors/slack/index.ts`
 
 - [ ] **Step 1: Fetch bot user ID on startup**
 
@@ -495,7 +495,7 @@ Expected: No type errors, all tests pass
 
 ```bash
 cd <repo>
-git add packages/jinn/src/connectors/slack/index.ts
+git add packages/hundredfold/src/connectors/slack/index.ts
 git commit -m "feat: reaction-triggered sessions in Slack connector
 
 Reacting to a bot message creates a new session with the reacted-to

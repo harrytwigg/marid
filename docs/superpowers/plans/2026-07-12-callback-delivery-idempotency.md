@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Follow strict red-green-refactor: no production behavior without a test that first failed for the expected reason.
-- Use disposable `JINN_HOME` directories and non-default ports for process-level verification.
+- Use disposable `HUNDREDFOLD_HOME` directories and non-default ports for process-level verification.
 - Preserve unrelated Activity, Workflow, Todo, chat, and operator scratch changes.
 - Keep every repository fixture generic and leak-check the staged diff before commit.
 - Do not deduplicate by message text, timestamp, or child session alone.
@@ -22,9 +22,9 @@
 ### Task 1: Durable callback identity and schema
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Create: `packages/jinn/src/sessions/__tests__/callback-deliveries.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Create: `packages/hundredfold/src/sessions/__tests__/callback-deliveries.test.ts`
 
 **Interfaces:**
 - Produces: `Session.attemptTerminalVersion: number`, `CallbackDeliveryIdentity`, `CallbackDeliveryPayload`, `claimCallbackDelivery`, `getCallbackDelivery`, `listPendingCallbackDeliveries`, and `acceptCallbackDelivery`.
@@ -36,7 +36,7 @@
 
 - [ ] **Step 2: Run the focused test and record RED**
 
-  Run `pnpm --filter jinn-cli test -- src/sessions/__tests__/callback-deliveries.test.ts` and confirm failure because the schema/functions do not exist.
+  Run `pnpm --filter hundredfold test -- src/sessions/__tests__/callback-deliveries.test.ts` and confirm failure because the schema/functions do not exist.
 
 - [ ] **Step 3: Add the minimal schema and attempt version support**
 
@@ -53,9 +53,9 @@
 ### Task 2: Callback sender outbox and restart recovery
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/server.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
 
 **Interfaces:**
 - Consumes: Task 1 callback delivery claim/list APIs.
@@ -67,7 +67,7 @@
 
 - [ ] **Step 2: Run the focused tests and record RED**
 
-  Run `pnpm --filter jinn-cli test -- src/sessions/__tests__/callbacks.test.ts` and confirm duplicate fetches or missing claim/recovery behavior.
+  Run `pnpm --filter hundredfold test -- src/sessions/__tests__/callbacks.test.ts` and confirm duplicate fetches or missing claim/recovery behavior.
 
 - [ ] **Step 3: Claim before POST and recover pending rows**
 
@@ -80,8 +80,8 @@
 ### Task 3: Transactional API acceptance and parent wake
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
 
 **Interfaces:**
 - Consumes: `acceptCallbackDelivery` and the stored callback payload.
@@ -93,7 +93,7 @@
 
 - [ ] **Step 2: Run the gateway reliability test and record RED**
 
-  Run `pnpm --filter jinn-cli test -- src/gateway/__tests__/callback-reliability.test.ts` and confirm the current route creates duplicate queue/message/execution state.
+  Run `pnpm --filter hundredfold test -- src/gateway/__tests__/callback-reliability.test.ts` and confirm the current route creates duplicate queue/message/execution state.
 
 - [ ] **Step 3: Route callback deliveries through transactional acceptance**
 

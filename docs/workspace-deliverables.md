@@ -21,7 +21,7 @@ Two mechanisms close the gap without moving the boundary an inch.
 ## 1. Declare the route
 
 Todos no longer record the route. It used to be a `deliverable` key inside a
-Todo's verify policy, and that policy was removed from Todos. Nothing in Marid
+Todo's verify policy, and that policy was removed from Todos. Nothing in Hundredfold
 stores or forwards the declaration now: whoever runs the pipeline passes it
 explicitly, as `--declared workspace` (or `repo`, the default) to the `route`
 command below.
@@ -46,7 +46,7 @@ git diff --name-status -z <base>..HEAD |
 ```
 
 `workspace` is honoured only when the diff is empty or confined to non-shipping
-paths — `docs/` and `.jinn-build/`. Non-shipping is an allowlist, not a denylist,
+paths — `docs/` and `.hundredfold-build/`. Non-shipping is an allowlist, not a denylist,
 so a top-level directory added later ships by default rather than silently
 escaping review. A diff touching anything else exits `2` — distinct from the
 usage failure `1` — and names every offending file. A Todo carrying real source
@@ -81,11 +81,11 @@ what it delivered:
 
 ```
 node scripts/deliverable-evidence.mjs write \
-  --todo ABC-42 --home ~/.jinn --summary "one Note on X" \
+  --todo ABC-42 --home ~/.hundredfold --summary "one Note on X" \
   knowledge/x.md skills/y/SKILL.md
 ```
 
-That writes `.jinn-build/deliverable-evidence.json` — gitignored, so per-run
+That writes `.hundredfold-build/deliverable-evidence.json` — gitignored, so per-run
 evidence never enters the public repo — naming each delivered file with its
 SHA-256 and byte count. Paths are relative to `--home`; anything that walks out
 of the home with `..`, resolves outside it, or sits under `secrets/` is refused

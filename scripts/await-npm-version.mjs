@@ -41,7 +41,7 @@ export async function awaitNpmVersion(version, options = {}) {
   if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(version)) throw new Error("Expected an exact npm version")
   const { registry = "https://registry.npmjs.org", fetchImpl = fetch } = options
   const result = await poll(async (remaining) => {
-    const url = new URL("/jinn-cli", registry)
+    const url = new URL("/hundredfold", registry)
     url.searchParams.set("release-check", randomUUID())
     const response = await fetchImpl(url, {
       headers: { "Cache-Control": "no-cache, no-store", Pragma: "no-cache", Accept: "application/json" },
@@ -51,7 +51,7 @@ export async function awaitNpmVersion(version, options = {}) {
     if (!response.ok) throw new Error(`Registry HTTP ${response.status}`)
     const metadata = await response.json()
     return metadata.versions?.[version]?.version === version && metadata.versions[version]
-  }, { ...options, label: `npm jinn-cli@${version}` })
+  }, { ...options, label: `npm hundredfold@${version}` })
   return result
 }
 

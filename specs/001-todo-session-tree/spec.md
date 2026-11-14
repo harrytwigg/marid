@@ -37,17 +37,17 @@ plan is handed over.
 | `packages/web/src/routes/todos/task-page/task-page.tsx:477` | `navigate('/?session=<id>')` | The existing switch-to-session navigation; the tree reuses it rather than inventing a route. |
 | `packages/web/src/routes/todos/task-page/whisper.tsx:87` | `if (actor.startsWith("session:")) return "A session"` | Audit lines name the actor as an anonymous "A session" — the identity is in hand and is thrown away. |
 | `packages/web/src/routes/todos/task-page/activity.tsx:39` | comment author `session:` prefix branch | Same loss on the comment thread. |
-| `packages/jinn/src/gateway/api.ts:2828` | `GET /api/work-items/:id/sessions` (`listSessionsByWorkItem`) | The Todo→sessions edge already has a read route; the Todo page already calls it. |
-| `packages/jinn/src/gateway/api.ts:2216` | `GET /api/sessions/:id/children` (`listChildSessions`) | The session→children edge already has a read route. |
+| `packages/hundredfold/src/gateway/api.ts:2828` | `GET /api/work-items/:id/sessions` (`listSessionsByWorkItem`) | The Todo→sessions edge already has a read route; the Todo page already calls it. |
+| `packages/hundredfold/src/gateway/api.ts:2216` | `GET /api/sessions/:id/children` (`listChildSessions`) | The session→children edge already has a read route. |
 | `packages/web/src/lib/api.ts:796` | `getSessionChildren` | Already defined in the web client and **called from nowhere in `packages/web/src`** — the children edge is plumbed to the browser and unused. |
-| `packages/jinn/src/gateway/api.ts:1128` | `serializeSession` returns `{ ...session, … }` | `parentSessionId`, `workItemId`, `workItemRole` and `employee` already reach the browser; `LinkedSessionWire` (`packages/web/src/lib/api.ts:677`) simply does not name them, absorbing them into its index signature. |
-| `packages/jinn/src/sessions/registry.ts:145` | `parentSessionId` mapped off `parent_session_id` | The delegation edge, per session. |
-| `packages/jinn/src/sessions/registry.ts:136` | `workItemRole` mapped off `work_item_role` | **A review hand-off is already a distinct link role in the database.** |
-| `packages/jinn/src/work-items/link-role.ts:51` | `resolveDelegationLinkRole` — explicit intent wins, else `in_review` implies `review` | Where that role is decided. Requirement 3 is a display problem, not a modelling one. |
-| `packages/jinn/src/sessions/migrate.ts:87` | `idx_sessions_parent` on `parent_session_id` | Walking the tree by parent is an indexed read. |
-| `packages/jinn/src/sessions/delegated-activity.ts:13` | `buildDelegatedActivityIndex` — walks the ancestor chain, `visited` set, "graph cycles are contained" | The existing, tested cycle-containment precedent. The tree walk follows its rule rather than inventing a second one. |
-| `packages/jinn/src/mcp/delegation-tools.ts:95` | `delegate_task` → `POST /api/delegations` (`packages/jinn/src/gateway/api.ts:3625`) | One call mints/resolves a Todo, spawns the child session, links the two. This is what puts a *second* Todo under the first one's tree. |
-| `packages/jinn/src/mcp/delegation-tools.ts:26` | "`jinn_request_review` is deliberately ABSENT" | Review is delegation with a reviewer-shaped brief, so it arrives on the same edges — nothing new to traverse. |
+| `packages/hundredfold/src/gateway/api.ts:1128` | `serializeSession` returns `{ ...session, … }` | `parentSessionId`, `workItemId`, `workItemRole` and `employee` already reach the browser; `LinkedSessionWire` (`packages/web/src/lib/api.ts:677`) simply does not name them, absorbing them into its index signature. |
+| `packages/hundredfold/src/sessions/registry.ts:145` | `parentSessionId` mapped off `parent_session_id` | The delegation edge, per session. |
+| `packages/hundredfold/src/sessions/registry.ts:136` | `workItemRole` mapped off `work_item_role` | **A review hand-off is already a distinct link role in the database.** |
+| `packages/hundredfold/src/work-items/link-role.ts:51` | `resolveDelegationLinkRole` — explicit intent wins, else `in_review` implies `review` | Where that role is decided. Requirement 3 is a display problem, not a modelling one. |
+| `packages/hundredfold/src/sessions/migrate.ts:87` | `idx_sessions_parent` on `parent_session_id` | Walking the tree by parent is an indexed read. |
+| `packages/hundredfold/src/sessions/delegated-activity.ts:13` | `buildDelegatedActivityIndex` — walks the ancestor chain, `visited` set, "graph cycles are contained" | The existing, tested cycle-containment precedent. The tree walk follows its rule rather than inventing a second one. |
+| `packages/hundredfold/src/mcp/delegation-tools.ts:95` | `delegate_task` → `POST /api/delegations` (`packages/hundredfold/src/gateway/api.ts:3625`) | One call mints/resolves a Todo, spawns the child session, links the two. This is what puts a *second* Todo under the first one's tree. |
+| `packages/hundredfold/src/mcp/delegation-tools.ts:26` | "`hundredfold_request_review` is deliberately ABSENT" | Review is delegation with a reviewer-shaped brief, so it arrives on the same edges — nothing new to traverse. |
 | `packages/web/src/components/peek/peek-stack.tsx` | existing stacked-peek surface | Considered and **rejected** for this feature: the ask is to *switch* to the session, and the rail's existing affordance already navigates. |
 
 The join that does not exist: nothing in the product composes the Todo→sessions edge with the

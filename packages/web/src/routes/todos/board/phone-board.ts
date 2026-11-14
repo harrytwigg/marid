@@ -30,7 +30,7 @@ export type BoardView = "board" | "list"
  *  The desktop drags either way. */
 export const PHONE_CARD_MOVE = "menu" as "menu" | "drag"
 
-const VIEW_KEY = "jinn-board-phone-view"
+const VIEW_KEY = "hundredfold-board-phone-view"
 
 /** The view this device last picked; the board until it picks. */
 export function loadBoardView(): BoardView {

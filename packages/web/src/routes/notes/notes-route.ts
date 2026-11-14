@@ -89,7 +89,7 @@ export function parseNotesLocation(pathname: string): NotesLocation {
   return result
 }
 
-const LAST_LOCATION_KEY = "jinn:notes:last-location:v1"
+const LAST_LOCATION_KEY = "hundredfold:notes:last-location:v1"
 
 /** Remember the last folder/note the operator had open, so a fresh visit to a
  *  bare /notes can restore it. Best-effort — storage may be unavailable. */

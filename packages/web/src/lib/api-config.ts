@@ -5,7 +5,7 @@ import { readResponseHeader, requestHeaderName } from "@/lib/codename"
  * The name the gateway stamps config.yaml's revision under, on both the GET that
  * serves the document and the PUT that rewrites it. Spelled here rather than
  * imported: the gateway's own module reaches node:fs to compute the value, and
- * nothing runtime crosses from that package into the bundle. `X-Jinn-Origin` is
+ * nothing runtime crosses from that package into the bundle. `X-Hundredfold-Origin` is
  * duplicated the same way, for the same reason. The gateway answers under both codenames'
  * spellings while a rename is in effect, so a page reads either and sends the current one.
  */

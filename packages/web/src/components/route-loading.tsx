@@ -7,7 +7,7 @@ import { useMember } from '@/hooks/use-principal'
  * The route-level Suspense fallback. It MUST carry the mobile tab bar: routes
  * are code-split and each page mounts its own MobileTabBar, so on a cold tab
  * switch this fallback is the committed frame between two pages. Without the
- * bar here, that frame has no `jinn-tab-bar` view-transition element — the
+ * bar here, that frame has no `hundredfold-tab-bar` view-transition element — the
  * bar's old snapshot plays an exit fade and the chat list shows through where
  * the bar was (the mobile "nav briefly disappears" bug). With it, the
  * view-transition pairs old and new bars and the nav holds still through the

@@ -25,7 +25,7 @@ import { linksOfEntries, writeLinks } from "./chain-links"
 import { chainNameOf } from "./chain-editor"
 import { mapConfigValue, type ServedModels } from "./model-map-model"
 import type { EnginesResponse } from "@/lib/api"
-import type { FallbackChainsResponse } from "@jinn/fallback-chain-wire"
+import type { FallbackChainsResponse } from "@hundredfold/fallback-chain-wire"
 
 interface EnginesSectionProps {
   engines: EnginesConfig | undefined

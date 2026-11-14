@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add `GeminiEngine` to the Jinn gateway - a third engine alongside Claude and Codex
+Add `GeminiEngine` to the Hundredfold gateway - a third engine alongside Claude and Codex
 that spawns Google's Gemini CLI (`@google/gemini-cli`) as a child process.
 
 ## Design Decisions

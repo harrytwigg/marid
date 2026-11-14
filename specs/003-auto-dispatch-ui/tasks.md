@@ -17,7 +17,7 @@ The React glue is tested where it branches (empty states, refusal placement), no
 
 ## Path Conventions
 
-pnpm/turbo monorepo: gateway in `packages/jinn/src/`, dashboard in `packages/web/src/`, tests
+pnpm/turbo monorepo: gateway in `packages/hundredfold/src/`, dashboard in `packages/web/src/`, tests
 in sibling `__tests__/` directories.
 
 ---
@@ -37,30 +37,30 @@ not cover for a new violation. Every new file ≤ 300 lines; `gateway/api.ts` mu
   verdict's windows, session, charged, cap) / `parseStartNote(body)` with the exact wording
   `recordStart` writes today; `parseMinutes` inverting `formatMinutes`; names with spaces
   and parentheses; negative minutes; a `partial` result for a body that does not fully parse
-  — `packages/jinn/src/shared/idle-capacity-record.ts`
+  — `packages/hundredfold/src/shared/idle-capacity-record.ts`
 - [x] T002 `recordStart` formats through T001; wording byte-identical —
-  `packages/jinn/src/gateway/idle-capacity.ts`
+  `packages/hundredfold/src/gateway/idle-capacity.ts`
 - [x] T003 Tests: round-trip whose input is a REAL `evaluateIdleCapacity` verdict for both
   triggers with a per-model weekly bucket; each `formatMinutes` shape; a past-reset window;
   an edited comment returns what it can, flagged; the existing loop suites stay green —
-  `packages/jinn/src/shared/__tests__/idle-capacity-record.test.ts`
+  `packages/hundredfold/src/shared/__tests__/idle-capacity-record.test.ts`
 
 ## Phase 2: User Story 2 — the history (P1)
 
 - [x] T004 [US2] `listIdleCapacityStarts({ limit })`: comments by `(system, idle-capacity)`,
   live only, newest first, parsed by T001, joined with the Todo's title and status —
-  `packages/jinn/src/gateway/idle-capacity-history.ts`
+  `packages/hundredfold/src/gateway/idle-capacity-history.ts`
 - [x] T005 [US2] Domain route module: `GET /api/idle-capacity` moved verbatim,
   `GET /api/idle-capacity/history?limit=` added, `GET /api/idle-capacity/policy` added
-  (`{ policy, configured }` + `X-Jinn-Config-Revision`, no collector, no loop); one
+  (`{ policy, configured }` + `X-Hundredfold-Config-Revision`, no collector, no loop); one
   delegation line replaces the preview block in `api.ts` —
-  `packages/jinn/src/gateway/idle-capacity-api.ts`, `api.ts`
+  `packages/hundredfold/src/gateway/idle-capacity-api.ts`, `api.ts`
 - [x] T006 [US2] Tests against the real store: a start's comment appears with every field; a
   comment by another author, a tombstoned one and a non-system `idle-capacity` author do not;
   a closed Todo is still listed with its status; the policy route resolves defaults over the
   file block and carries the same revision `GET /api/config` does; the preview route still
   answers 503 without a loop and passes the existing route test —
-  `packages/jinn/src/gateway/__tests__/idle-capacity-api.test.ts`
+  `packages/hundredfold/src/gateway/__tests__/idle-capacity-api.test.ts`
 
 ## Phase 3: User Story 3 + shell — the destination and the next tick (P3, but the shell)
 
@@ -130,7 +130,7 @@ not cover for a new violation. Every new file ≤ 300 lines; `gateway/api.ts` mu
   `7d*` window that carries `resetsAt` (others left out); bounded 7 d / 2 500; readings
   within 5 min of the last recorded collapsed; written whole under a per-process temporary
   name then renamed; read/write swallow their own errors —
-  `packages/jinn/src/shared/claude-usage-history.ts`, one call in `engine-limits-claude.ts`
+  `packages/hundredfold/src/shared/claude-usage-history.ts`, one call in `engine-limits-claude.ts`
 - [x] T018 [US4] `GET /api/idle-capacity/usage?hours=` in the domain module (clamped 1–168,
   default 168); the page polls it every 5 min, the sample cadence
 - [x] T019 [US4] Tests: live-only, a window without a reset is left out, bounds, the
@@ -164,7 +164,7 @@ not cover for a new violation. Every new file ≤ 300 lines; `gateway/api.ts` mu
 
 - [x] T022 `docs/idle-capacity.md`: the dashboard in "Configuration" and "Observing it"
 - [ ] T023 Spec artefacts current; plan's Post-Design re-check run
-- [ ] T024 Gates: `pnpm typecheck`, `pnpm lint`, `pnpm build`, targeted suites, full jinn and
+- [ ] T024 Gates: `pnpm typecheck`, `pnpm lint`, `pnpm build`, targeted suites, full hundredfold and
   web suites; `pnpm ratchet --check` shows no violation introduced by this branch
 - [x] T025 Design/plan review by senior-developer-qa round 0 (2026-09-21): REVISE FIRST —
   findings 1–13 and the projection addendum folded in; re-check of 1–5: PROCEED with the

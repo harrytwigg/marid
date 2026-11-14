@@ -1,6 +1,6 @@
 import { vi } from "vitest"
 import type {
-  JinnNativeBridge,
+  HundredfoldNativeBridge,
   NativeRequestInput,
   NativeResponsePayload,
   NativeStreamEvent,
@@ -41,7 +41,7 @@ export function bridgeFixture() {
     networkExposed: false,
     instance: input.target.origin.endsWith("7779") ? "alpha" : "beta",
   }))
-  const bridge: JinnNativeBridge = {
+  const bridge: HundredfoldNativeBridge = {
     runtime: "tauri",
     pair: vi.fn(async ({ target }) => ({
       origin: new URL(target.origin).origin,

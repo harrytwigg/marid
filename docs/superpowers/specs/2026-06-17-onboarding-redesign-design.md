@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-17
 **Status:** Approved design → ready for implementation plan
-**Scope:** First-run onboarding for a fresh Jinn instance (web wizard + the live COO setup conversation that follows it).
+**Scope:** First-run onboarding for a fresh Hundredfold instance (web wizard + the live COO setup conversation that follows it).
 
 > Names like "John" (operator) and "Hui" (portal/COO) below are illustrative
 > examples of the configured `operatorName` / `portalName`, not literals.
@@ -30,9 +30,9 @@ Onboarding today is **better-built than it is reachable**, and the two halves do
      of **the user's** organization. You report to **John** (CEO)."* The model
      then says *"I help John run this"* (third person) and asks the
      person-it's-chatting-with for their name — even though that person **is** John.
-   - It hardcodes `~/.jinn` paths (not instance-aware).
+   - It hardcodes `~/.hundredfold` paths (not instance-aware).
 
-3. **`jinn create` can report false success.** When the interactive setup
+3. **`hundredfold create` can report false success.** When the interactive setup
    subprocess hits stdin EOF mid-prompt, `prompt()` never resolves, the process
    exits 0 with the home half-built, yet `create` prints "Instance created
    successfully" and registers the broken instance.
@@ -122,7 +122,7 @@ plumbing for no benefit over the client opening it.
   via the existing session API and `navigate` into it (instead of routing to a
   blank `/`).
 - **Visual refresh:** restyle to match `/chat` (frosted material, tonal layers,
-  spacing) — delegated to **jinn-designer** during build.
+  spacing) — delegated to **hundredfold-designer** during build.
 
 ### 4.2 Identity / context fix (gateway)
 - **`buildIdentity()`** (context.ts:378): second-person framing. Establish *"The
@@ -130,7 +130,7 @@ plumbing for no benefit over the client opening it.
   person)."* Keep the CEO/relationship framing out of the conversational voice.
 - **`buildOnboardingContext()`** — new function replacing `buildEvolutionContext`'s
   flat script. Takes `portalName`, `operatorName`, `language`. Drives the beats
-  (below). Instance-path-safe (use `JINN_HOME`/paths, not literal `~/.jinn`).
+  (below). Instance-path-safe (use `HUNDREDFOLD_HOME`/paths, not literal `~/.hundredfold`).
   Gate on `config.portal.onboarded === false` (not the profile-file heuristic).
 
 ### 4.3 Onboarding skill rewrite
@@ -157,15 +157,15 @@ plumbing for no benefit over the client opening it.
   6. **Wrap** — recap what's set up, point to where things live, set
      `config.portal.onboarded = true`.
 - Use `{{portalName}}` / `{{portalSlug}}` placeholders and instance-safe paths
-  throughout (current template hardcodes `~/.jinn`).
+  throughout (current template hardcodes `~/.hundredfold`).
 
-### 4.4 jinn-designer visual refresh
-- Wizard restyle to match `/chat`. Delegated to jinn-designer in implementation.
+### 4.4 hundredfold-designer visual refresh
+- Wizard restyle to match `/chat`. Delegated to hundredfold-designer in implementation.
   Inputs: genie icon, the new 5-step structure, frosted/tonal styling.
 
 ### 4.5 Completion + idempotency
 - Wrap sets `onboarded:true`; context builder stops injecting onboarding mode;
-  wizard localStorage fast-path (`jinn-onboarded`) stays as the client cache.
+  wizard localStorage fast-path (`hundredfold-onboarded`) stays as the client cache.
 - Provide a manual "redo onboarding" path later (clears the flag) — not required
   for v1.
 
@@ -175,7 +175,7 @@ plumbing for no benefit over the client opening it.
   prior choice still wins **both** ways (store/honor "focused" too), rather than
   only flipping to "all" when stored.
 
-### 4.7 `jinn create` hardening (folded-in)
+### 4.7 `hundredfold create` hardening (folded-in)
 - After the setup subprocess returns, verify the instance home is actually
   populated (e.g. `config.yaml` exists) **before** registering the instance and
   printing success; make `prompt()` resolve on stdin `close`/EOF.
@@ -185,15 +185,15 @@ plumbing for no benefit over the client opening it.
 
 | Area | File | Change |
 |------|------|--------|
-| Gate | `packages/jinn/src/gateway/api.ts` (~1706) | `needed = !onboarded` |
-| Identity | `packages/jinn/src/sessions/context.ts` (378) | second-person `buildIdentity` |
-| Onboarding ctx | `packages/jinn/src/sessions/context.ts` (655) | replace with `buildOnboardingContext`, gate on `onboarded`, instance-safe paths |
-| Skill | `packages/jinn/template/skills/onboarding/SKILL.md` | gamified multi-beat rewrite |
+| Gate | `packages/hundredfold/src/gateway/api.ts` (~1706) | `needed = !onboarded` |
+| Identity | `packages/hundredfold/src/sessions/context.ts` (378) | second-person `buildIdentity` |
+| Onboarding ctx | `packages/hundredfold/src/sessions/context.ts` (655) | replace with `buildOnboardingContext`, gate on `onboarded`, instance-safe paths |
+| Skill | `packages/hundredfold/template/skills/onboarding/SKILL.md` | gamified multi-beat rewrite |
 | Wizard logic | `packages/web/src/components/onboarding-wizard.tsx` | genie icon, engine/model/effort step, launch-into-chat on complete |
-| Wizard visuals | (same) | jinn-designer restyle to `/chat` |
+| Wizard visuals | (same) | hundredfold-designer restyle to `/chat` |
 | Chat filter | `packages/web/src/components/chat/chat-sidebar.tsx` (952, 991) | default "all" + honor stored choice |
 | Defaults persistence | `gateway/api.ts` completeOnboarding + `shared/config` | write engine/model/effort to config |
-| create hardening | `packages/jinn/src/cli/create.ts`, `cli/setup.ts` | verify setup before success; EOF-safe prompt |
+| create hardening | `packages/hundredfold/src/cli/create.ts`, `cli/setup.ts` | verify setup before success; EOF-safe prompt |
 
 ## 6. Note: "skills for the employee"
 
@@ -214,15 +214,15 @@ skill together") while staying true to the architecture.
 - Genie can hatch a real employee (YAML on disk + appears in org), scaffold a
   skill, spawn a visible child session, and create a real cron — each skippable.
 - `/chat` opens on "All"; a previously-chosen "focused" still loads as focused.
-- `jinn create` with interrupted/EOF setup does **not** report success or
+- `hundredfold create` with interrupted/EOF setup does **not** report success or
   register a half-built instance.
 - Engine selectors driven by the config `models` registry (no hardcoded list).
 
 ## 8. Implementation note
 
-Build on a feature branch off `main`. Web visuals go through **jinn-designer**;
-gateway/skill changes through **jinn-dev**. The live `~/.jinn` gateway (port
-7777) and `~/.jinn` data must not be touched during development; validate on an
+Build on a feature branch off `main`. Web visuals go through **hundredfold-designer**;
+gateway/skill changes through **hundredfold-dev**. The live `~/.hundredfold` gateway (port
+7777) and `~/.hundredfold` data must not be touched during development; validate on an
 isolated throwaway instance (e.g. `~/.test-onboarding` on a non-7777 port).
 
 ---

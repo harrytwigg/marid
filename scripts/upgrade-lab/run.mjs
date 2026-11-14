@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { LEGACY, legacyEnv, legacyHomeName } from "../legacy-names.mjs"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import net from "node:net"
@@ -9,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { buildLabProcessScanPipeline, listLabHomeProcessIds } from "./process-scan.mjs"
 import { assertWorkflowSkillRetired, assertWorkflowStateSurvived } from "./workflow-state.mjs"
 
-const NONCE = ".jinn-upgrade-lab-nonce"
+const NONCE = ".hundredfold-upgrade-lab-nonce"
 const SCENARIOS = new Set(["stock", "customized", "heavily-customized", "interrupted", "no-instance-change"])
 const PROTECTED_GATEWAY_PORTS = new Set([7777, 7801])
 const LAB_PORT_MIN = 20_000
@@ -49,25 +50,28 @@ export function createLabRoot(explicitRoot) {
     if (fs.existsSync(root)) throw new Error(`Disposable lab root must not already exist: ${root}`)
     fs.mkdirSync(root, { recursive: true, mode: 0o700 })
   } else {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-upgrade-lab-"))
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-upgrade-lab-"))
   }
   fs.writeFileSync(path.join(root, NONCE), `${crypto.randomUUID()}\n`, { mode: 0o600 })
   return fs.realpathSync(root)
 }
 
 export function assertIsolatedLayout(rootInput) {
-  const livePath = path.resolve(os.homedir(), ".jinn")
-  const live = fs.existsSync(livePath) ? fs.realpathSync(livePath) : livePath
+  // The live instance is at the current default home or, until it has been moved, at the one an older build used.
+  const liveHomes = [".hundredfold", legacyHomeName].map((name) => {
+    const livePath = path.resolve(os.homedir(), name)
+    return fs.existsSync(livePath) ? fs.realpathSync(livePath) : livePath
+  })
   const requested = path.resolve(rootInput)
-  if (inside(live, requested)) throw new Error("Lab root is the live instance or nested inside the live instance")
+  if (liveHomes.some((live) => inside(live, requested))) throw new Error("Lab root is the live instance or nested inside the live instance")
   const root = fs.realpathSync(rootInput)
-  if (inside(live, root)) throw new Error("Lab root is the live instance or nested inside the live instance")
+  if (liveHomes.some((live) => inside(live, root))) throw new Error("Lab root is the live instance or nested inside the live instance")
   if (!root.startsWith(`${fs.realpathSync(os.tmpdir())}${path.sep}`) && !fs.existsSync(path.join(root, NONCE))) {
     throw new Error("Explicit lab root is not a newly created nonce-owned disposable directory")
   }
   const entries = {
     root,
-    home: path.join(root, "home", ".jinn-lab"),
+    home: path.join(root, "home", ".hundredfold-lab"),
     osHome: path.join(root, "home"),
     cache: path.join(root, "cache"),
     prefix: path.join(root, "prefix"),
@@ -82,7 +86,7 @@ export function assertIsolatedLayout(rootInput) {
   for (const value of Object.values(entries)) {
     if (!inside(root, path.resolve(value))) throw new Error(`Lab path escapes disposable root: ${value}`)
   }
-  if (inside(live, entries.home)) throw new Error("Lab home overlaps the live instance")
+  if (liveHomes.some((live) => inside(live, entries.home))) throw new Error("Lab home overlaps the live instance")
   for (const value of Object.values(entries)) fs.mkdirSync(value, { recursive: true })
   return entries
 }
@@ -91,12 +95,12 @@ export function buildMinimalEnvironment(layout, base = {}) {
   const env = {
     PATH: base.PATH ?? "/usr/bin:/bin",
     HOME: layout.osHome,
-    JINN_HOME: layout.home,
-    JINN_INSTANCE: "upgrade-lab",
-    JINN_INSTANCES_REGISTRY: layout.registry,
-    JINN_REGISTRY_PATH: layout.registry,
-    JINN_LOG_DIR: layout.logs,
-    JINN_ATTACHMENTS_DIR: layout.attachments,
+    HUNDREDFOLD_HOME: layout.home,
+    HUNDREDFOLD_INSTANCE: "upgrade-lab",
+    HUNDREDFOLD_INSTANCES_REGISTRY: layout.registry,
+    HUNDREDFOLD_REGISTRY_PATH: layout.registry,
+    HUNDREDFOLD_LOG_DIR: layout.logs,
+    HUNDREDFOLD_ATTACHMENTS_DIR: layout.attachments,
     XDG_CONFIG_HOME: layout.xdgConfig,
     XDG_CACHE_HOME: layout.xdgCache,
     XDG_DATA_HOME: layout.xdgData,
@@ -108,7 +112,11 @@ export function buildMinimalEnvironment(layout, base = {}) {
     NO_COLOR: "1",
     CI: "1",
     TERM: "dumb",
-    JINN_NO_OPEN: "1",
+    HUNDREDFOLD_NO_OPEN: "1",
+  }
+  // A baseline build from before the rename reads the old names; the candidate adopts them and prefers the new.
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("HUNDREDFOLD_")) for (const old of legacyEnv(key.slice("HUNDREDFOLD_".length))) env[old] = env[key]
   }
   for (const [key, value] of Object.entries(env)) if (value === undefined) delete env[key]
   return env
@@ -156,7 +164,7 @@ export async function executeDockerLab(options, dependencies = {}) {
   }
   const candidateTarball = copyIntoRoot(options.candidateTarball)
   const baselineTarball = copyIntoRoot(options.baselineTarball)
-  const image = `jinn-upgrade-lab:${sha256(fs.readFileSync(path.join(options.root, NONCE))).slice(0, 12)}`
+  const image = `hundredfold-upgrade-lab:${sha256(fs.readFileSync(path.join(options.root, NONCE))).slice(0, 12)}`
   const dockerfile = path.join(options.repo, "scripts", "upgrade-lab", "Dockerfile")
   const context = path.dirname(dockerfile)
   const build = runCommand("docker", ["build", "--file", dockerfile, "--tag", image, context])
@@ -288,29 +296,29 @@ export function lookupListeningPid(port) {
   throw new Error(`Cannot verify ownership of lab port ${port}: lsof is unavailable`)
 }
 
-export function readProcessJinnHome(pid) {
+export function readProcessHundredfoldHome(pid) {
   if (process.platform === "linux") {
     try {
       const entries = fs.readFileSync(`/proc/${pid}/environ`, "utf8").split("\0")
-      const entry = entries.find((value) => value.startsWith("JINN_HOME="))
-      return entry ? entry.slice("JINN_HOME=".length) : null
+      const entry = entries.find((value) => value.startsWith("HUNDREDFOLD_HOME="))
+      return entry ? entry.slice("HUNDREDFOLD_HOME=".length) : null
     } catch {}
   }
   const result = spawnSync("ps", ["eww", "-p", String(pid), "-o", "command="], { encoding: "utf8" })
   if (result.status !== 0) return null
-  const match = result.stdout.match(/(?:^|\s)JINN_HOME=([^\s]+)/)
+  const match = result.stdout.match(/(?:^|\s)HUNDREDFOLD_HOME=([^\s]+)/)
   return match?.[1] ?? null
 }
 
 export function assertLabProcessTarget({ pid, port, labHome }, dependencies = {}) {
   assertSafeLabPort(port)
   const lookup = dependencies.lookupListeningPid ?? lookupListeningPid
-  const readHome = dependencies.readProcessJinnHome ?? readProcessJinnHome
+  const readHome = dependencies.readProcessHundredfoldHome ?? readProcessHundredfoldHome
   const ownerPid = lookup(port)
   if (ownerPid !== pid) throw new Error(`Refusing to signal PID ${pid}: lab port ${port} is owned by PID ${ownerPid ?? "none"}, not ${pid}`)
   const ownerHome = readHome(pid)
   if (!ownerHome || resolvedIdentity(ownerHome) !== resolvedIdentity(labHome)) {
-    throw new Error(`Refusing to signal foreign process ${pid}: JINN_HOME=${ownerHome ?? "unknown"}, expected ${resolvedIdentity(labHome)}`)
+    throw new Error(`Refusing to signal foreign process ${pid}: HUNDREDFOLD_HOME=${ownerHome ?? "unknown"}, expected ${resolvedIdentity(labHome)}`)
   }
 }
 
@@ -340,10 +348,10 @@ export async function assertLabStartPreflight({ labHome, port }, dependencies = 
     await (dependencies.probePortAvailable ?? probePortAvailable)(port)
   } catch (error) {
     const lookup = dependencies.lookupListeningPid ?? lookupListeningPid
-    const readHome = dependencies.readProcessJinnHome ?? readProcessJinnHome
+    const readHome = dependencies.readProcessHundredfoldHome ?? readProcessHundredfoldHome
     const ownerPid = lookup(port)
     const ownerHome = ownerPid === null ? null : readHome(ownerPid)
-    const ownership = ownerPid === null ? "unknown owner" : `PID ${ownerPid}, JINN_HOME=${ownerHome ?? "unknown"}`
+    const ownership = ownerPid === null ? "unknown owner" : `PID ${ownerPid}, HUNDREDFOLD_HOME=${ownerHome ?? "unknown"}`
     const foreign = !ownerHome || resolvedIdentity(ownerHome) !== resolvedIdentity(labHome)
     throw new Error(`${foreign ? "Foreign process" : "Lab process"} already occupies lab port ${port} (${ownership}); refusing to start or restart: ${error.message}`)
   }
@@ -469,23 +477,32 @@ function parseArgs(argv) {
 
 function packCandidate(repo, cache, env) {
   const before = new Set(fs.readdirSync(cache))
-  run("pnpm", ["pack", "--pack-destination", cache], { cwd: path.join(repo, "packages", "jinn"), env })
+  run("pnpm", ["pack", "--pack-destination", cache], { cwd: path.join(repo, "packages", "hundredfold"), env })
   const created = fs.readdirSync(cache).filter((name) => !before.has(name) && name.endsWith(".tgz"))
   if (created.length !== 1) throw new Error(`Candidate pack produced ${created.length} tarballs`)
   return path.join(cache, created[0])
 }
 
+// The published package a candidate is measured against: the last release before the rename, which is what an install
+// being upgraded is running. Switch to the new name once it has a release of its own.
+const BASELINE_PACKAGE = LEGACY.package
+
+// Where a global install put the package: under the new name, or under the old one for the baseline.
+const installedPackageRoot = (prefix) =>
+  ["hundredfold", BASELINE_PACKAGE].map((name) => path.join(prefix, "lib", "node_modules", name)).find((dir) => fs.existsSync(dir)) ??
+  path.join(prefix, "lib", "node_modules", "hundredfold")
+
 function previousReleaseVersion(env) {
   // Baseline is npm's published latest, never a git tag: a tag can name a version that never published (v0.31.0), and on a merge commit `HEAD^` walks the local first-parent lineage instead of the released one.
-  const version = run("npm", ["view", "jinn-cli", "version"], { env })
+  const version = run("npm", ["view", BASELINE_PACKAGE, "version"], { env })
   if (!STRICT_VERSION.test(version)) throw new Error(`npm did not report a plain published version: ${version}`)
   return version
 }
 
 function packPublicBaseline(cache, env) {
   const version = previousReleaseVersion(env)
-  run("npm", ["pack", `jinn-cli@${version}`, "--pack-destination", cache], { env })
-  const name = fs.readdirSync(cache).find((entry) => entry === `jinn-cli-${version}.tgz`)
+  run("npm", ["pack", `${BASELINE_PACKAGE}@${version}`, "--pack-destination", cache], { env })
+  const name = fs.readdirSync(cache).find((entry) => entry === `${BASELINE_PACKAGE}-${version}.tgz`)
   if (!name) throw new Error(`npm did not produce the v${version} baseline tarball`)
   return path.join(cache, name)
 }
@@ -493,9 +510,10 @@ function packPublicBaseline(cache, env) {
 function installTarball(tarball, prefix, env) {
   fs.mkdirSync(prefix, { recursive: true })
   run("npm", ["install", "--global", "--prefix", prefix, "--ignore-scripts", "--no-audit", "--no-fund", tarball], { env: { ...env, npm_config_prefix: prefix } })
-  const cli = path.join(prefix, "lib", "node_modules", "jinn-cli", "dist", "bin", "jinn.js")
-  if (!fs.existsSync(cli)) throw new Error(`Installed package has no CLI: ${cli}`)
-  const packageRoot = path.join(prefix, "lib", "node_modules", "jinn-cli")
+  const packageRoot = installedPackageRoot(prefix)
+  // `hundredfold.js`, or the old name in a release from before the rename.
+  const cli = ["hundredfold.js", `${LEGACY.codename}.js`].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file))
+  if (!cli) throw new Error(`Installed package has no CLI under ${packageRoot}/dist/bin`)
   const rebuild = buildNativeDependencyRebuild(packageRoot)
   run(rebuild.command, rebuild.args, { env: { ...env, npm_config_prefix: prefix, npm_config_ignore_scripts: "false" } })
   return { cli, packageRoot }
@@ -517,7 +535,7 @@ export function buildNativeDependencyRebuild(packageRoot) {
 
 async function startGateway(cli, port, env, logPath, contactedPorts) {
   assertSafeLabPort(port)
-  await assertLabStartPreflight({ labHome: env.JINN_HOME, port })
+  await assertLabStartPreflight({ labHome: env.HUNDREDFOLD_HOME, port })
   contactedPorts.push(port)
   const log = fs.openSync(logPath, "a")
   const child = spawn(process.execPath, [cli, "start", "--port", String(port)], {
@@ -537,13 +555,13 @@ async function startGateway(cli, port, env, logPath, contactedPorts) {
       const response = await fetch(`http://127.0.0.1:${port}/api/status`)
       if (response.ok) {
         const status = await response.json()
-        assertLabProcessTarget({ pid: child.pid, port, labHome: env.JINN_HOME })
-        return { child, log, status, port, labHome: env.JINN_HOME }
+        assertLabProcessTarget({ pid: child.pid, port, labHome: env.HUNDREDFOLD_HOME })
+        return { child, log, status, port, labHome: env.HUNDREDFOLD_HOME }
       }
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  signalVerifiedLabProcess({ pid: child.pid, port, labHome: env.JINN_HOME, signal: "SIGTERM" })
+  signalVerifiedLabProcess({ pid: child.pid, port, labHome: env.HUNDREDFOLD_HOME, signal: "SIGTERM" })
   fs.closeSync(log)
   throw new Error(`Lab gateway did not become ready on deterministic port ${port}\n${fs.readFileSync(logPath, "utf8")}`)
 }
@@ -561,9 +579,9 @@ async function stopGateway(handle) {
     await waitForExit(5_000)
   }
   if (handle.child.exitCode === null && handle.child.signalCode === null) {
-    const ownerHome = readProcessJinnHome(handle.child.pid)
+    const ownerHome = readProcessHundredfoldHome(handle.child.pid)
     if (!ownerHome || resolvedIdentity(ownerHome) !== resolvedIdentity(handle.labHome)) {
-      throw new Error(`Refusing to kill foreign surviving process ${handle.child.pid}: JINN_HOME=${ownerHome ?? "unknown"}`)
+      throw new Error(`Refusing to kill foreign surviving process ${handle.child.pid}: HUNDREDFOLD_HOME=${ownerHome ?? "unknown"}`)
     }
     process.kill(handle.child.pid, "SIGKILL")
     if (!await waitForExit(5_000)) throw new Error(`Lab gateway PID ${handle.child.pid} did not exit after SIGKILL`)
@@ -677,7 +695,7 @@ async function captureMigrationScreenshots({ port, token, artifacts, required })
         colorScheme: screenshot.theme,
       })
       const page = await context.newPage()
-      await page.addInitScript((theme) => localStorage.setItem("jinn-theme", theme), screenshot.theme)
+      await page.addInitScript((theme) => localStorage.setItem("hundredfold-theme", theme), screenshot.theme)
       await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "networkidle" })
       const migrationSurface = migrationSurfaceLocator(page)
       if (required) await migrationSurface.waitFor({ state: "visible", timeout: 15_000 })
@@ -693,7 +711,7 @@ async function captureMigrationScreenshots({ port, token, artifacts, required })
   return files
 }
 
-export function liveSentinelMetadata(homeInput = path.resolve(os.homedir(), ".jinn")) {
+export function liveSentinelMetadata(homeInput = path.resolve(os.homedir(), ".hundredfold")) {
   const home = path.resolve(homeInput)
   // The live gateway legitimately writes sessions/registry.db while the lab is
   // running (including for the chat supervising this test). Keep this sentinel
@@ -845,6 +863,7 @@ async function executeScenario({ scenario, candidateTarball, baselineTarball, ro
   let allocationReleased = false
   const env = buildMinimalEnvironment(layout, { PATH: process.env.PATH ?? "" })
   const liveBefore = liveSentinelMetadata()
+  const legacyLiveBefore = liveSentinelMetadata(path.resolve(os.homedir(), legacyHomeName)) // an instance not yet moved
   const summary = { schemaVersion: 1, scenario, port: allocation.port, contactedPorts: [], candidateSha256: null, baselineSha256: null, checks: {}, screenshots: [], artifacts: layout.artifacts }
   let primaryError
   try {
@@ -1055,11 +1074,12 @@ async function executeScenario({ scenario, candidateTarball, baselineTarball, ro
     }
     summary.checks.stateSurvived = "PASS"
     summary.checks.protectedPortsNeverContacted = summary.contactedPorts.some((port) => PROTECTED_GATEWAY_PORTS.has(port)) ? "FAIL" : "PASS"
-    const livePath = path.resolve(os.homedir(), ".jinn")
+    const livePath = path.resolve(os.homedir(), ".hundredfold")
     const liveResolved = fs.existsSync(livePath) ? fs.realpathSync(livePath) : livePath
     summary.checks.liveInstanceUnaddressable = inside(liveResolved, layout.home) ? "FAIL" : "PASS"
     const liveAfter = liveSentinelMetadata()
-    if (liveBefore.digest !== liveAfter.digest) throw new Error("live instance sentinel metadata changed during the lab")
+    const legacyLiveAfter = liveSentinelMetadata(path.resolve(os.homedir(), legacyHomeName))
+    if (liveBefore.digest !== liveAfter.digest || legacyLiveBefore.digest !== legacyLiveAfter.digest) throw new Error("live instance sentinel metadata changed during the lab")
     summary.liveSentinels = { before: liveBefore.digest, after: liveAfter.digest, unchanged: true }
     summary.checks.liveInstanceSentinelsUnchanged = "PASS"
     const candidateManifest = path.join(candidateInstall.packageRoot, "template", "migrations", candidateVersion, "manifest.json")

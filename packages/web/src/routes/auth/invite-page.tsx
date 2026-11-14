@@ -116,14 +116,14 @@ function InviteRoleNote({ info }: { info: InviteInspectWire }) {
 
 function InviteForm({ info, submit }: { info: InviteInspectWire; submit: Submit }) {
   const form = useAcceptForm(submit)
-  const errorId = "jinn-invite-error"
+  const errorId = "hundredfold-invite-error"
   return (
     <AccountPageFrame title={headline(info)} subtitle={info.invitedBy ? `Invited by ${info.invitedBy}` : undefined}>
       <InviteRoleNote info={info} />
       <form onSubmit={form.accept} aria-label="Accept invite" noValidate className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
-        <AccountField id="jinn-invite-email" label="Email" type="email" value={info.email} readOnly autoComplete="username" />
+        <AccountField id="hundredfold-invite-email" label="Email" type="email" value={info.email} readOnly autoComplete="username" />
         <AccountField
-          id="jinn-invite-name"
+          id="hundredfold-invite-name"
           label="Your name"
           icon={<User size={16} className="shrink-0 text-[var(--text-tertiary)]" />}
           type="text"
@@ -136,7 +136,7 @@ function InviteForm({ info, submit }: { info: InviteInspectWire; submit: Submit 
           errorId={errorId}
         />
         <PasswordFields
-          idPrefix="jinn-invite"
+          idPrefix="hundredfold-invite"
           password={form.password}
           confirm={form.confirm}
           onPassword={form.setPassword}

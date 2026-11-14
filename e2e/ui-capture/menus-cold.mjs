@@ -48,7 +48,7 @@ async function neverArrives({ fixtures }, { check, assert, open }) {
 // Nothing of the popup is fetched before the page has loaded; once it has, and the page is idle, it is warmed with no press.
 async function warmUp({ browser, headers, baseUrl }, { check, assert }) {
   const context = await browser.newContext({ viewport: DESKTOP, extraHTTPHeaders: headers })
-  await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+  await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
   const page = await context.newPage()
   const fetches = []
   let loadedAt = null

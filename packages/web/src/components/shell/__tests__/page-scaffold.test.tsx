@@ -25,7 +25,7 @@ describe("PageScaffold", () => {
 
     const scroll = container.querySelector("[data-scrollable]")
     expect(scroll).toBeTruthy()
-    expect(scroll?.querySelector(".jinn-large-title")).toBeTruthy()
+    expect(scroll?.querySelector(".hundredfold-large-title")).toBeTruthy()
     expect(scroll?.textContent).toContain("Body")
   })
 
@@ -43,8 +43,8 @@ describe("PageScaffold", () => {
     const scrollables = container.querySelectorAll("[data-scrollable]")
     expect(scrollables).toHaveLength(1)
     expect(scrollables[0].getAttribute("data-testid")).toBe("page-scroller")
-    expect(container.querySelector(".jinn-large-title")).toBeTruthy()
-    expect(container.querySelector(".jinn-inline-title")).toBeNull()
+    expect(container.querySelector(".hundredfold-large-title")).toBeTruthy()
+    expect(container.querySelector(".hundredfold-inline-title")).toBeNull()
   })
 
   it("publishes the scroll node through state so a descendant sees it after commit", async () => {
@@ -109,8 +109,8 @@ describe("PageScaffold", () => {
       </PageScaffold>,
     )
     const scroll = container.querySelector("[data-scrollable]") as HTMLElement
-    expect(scroll.style.getPropertyValue("--jinn-scaffold-bottom")).toBe(pad)
-    expect(scroll.className).toContain("pb-[var(--jinn-scaffold-bottom)]")
+    expect(scroll.style.getPropertyValue("--hundredfold-scaffold-bottom")).toBe(pad)
+    expect(scroll.className).toContain("pb-[var(--hundredfold-scaffold-bottom)]")
     expect(scroll.className).toContain("lg:pb-10")
   })
 })

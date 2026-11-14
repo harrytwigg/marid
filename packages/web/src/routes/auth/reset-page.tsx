@@ -77,16 +77,16 @@ function ResetForm({ info, submit }: { info: ResetInspectWire; submit: (run: (to
     <AccountPageFrame title="Choose a new password" subtitle={info.email}>
       <form onSubmit={complete} aria-label="Reset password" noValidate className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
         <PasswordFields
-          idPrefix="jinn-reset"
+          idPrefix="hundredfold-reset"
           password={password}
           confirm={confirm}
           onPassword={setPassword}
           onConfirm={setConfirm}
           disabled={busy}
           invalid={Boolean(message)}
-          describedBy={message ? "jinn-reset-error" : undefined}
+          describedBy={message ? "hundredfold-reset-error" : undefined}
         />
-        {message && <ErrorBanner id="jinn-reset-error">{message}</ErrorBanner>}
+        {message && <ErrorBanner id="hundredfold-reset-error">{message}</ErrorBanner>}
         <button type="submit" disabled={busy} aria-label={busy ? "Saving your password" : "Set password"} className={submitClass}>
           <AuthStateIcon busy={busy} idleIcon={Check} size={16} />
           <AuthStateLabel busy={busy} idle="Set password" busyText="Saving..." className="min-w-[7rem]" />

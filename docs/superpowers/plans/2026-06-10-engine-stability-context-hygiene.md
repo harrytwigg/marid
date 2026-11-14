@@ -6,13 +6,13 @@
 
 **Architecture:** Track 1 hardens the existing per-engine completion detection (no state-machine refactor): a grace window + late-recovery supersede in `TurnResolver`, deterministic `task_complete` parsing in codex-interactive, and a periodic gateway status reconciler. Track 2 makes `buildContext()` audience-aware (COO vs manager vs employee) and moves static content (API table, connector recipes) into the engine-ingested CLAUDE.md/AGENTS.md.
 
-**Tech Stack:** TypeScript (Node), vitest, node-pty. Repo: `~/Projects/jinn`, package `packages/jinn` (run tests with `pnpm --filter jinn-cli exec vitest run <file>`; typecheck with `pnpm --filter jinn-cli typecheck`).
+**Tech Stack:** TypeScript (Node), vitest, node-pty. Repo: `~/Projects/hundredfold`, package `packages/hundredfold` (run tests with `pnpm --filter hundredfold exec vitest run <file>`; typecheck with `pnpm --filter hundredfold typecheck`).
 
 **Spec:** `docs/superpowers/specs/2026-06-10-engine-stability-context-hygiene-design.md`
 
 **Execution notes:**
 - Work in a git worktree (superpowers:using-git-worktrees) off `main`. Source-only: do NOT rebuild `dist/` or restart the live gateway on port 7777.
-- The live instance file `~/.jinn/CLAUDE.md` (Task 9) is edited in place in `~/.jinn` (its own git repo) — NOT part of the jinn repo worktree.
+- The live instance file `~/.hundredfold/CLAUDE.md` (Task 9) is edited in place in `~/.hundredfold` (its own git repo) — NOT part of the hundredfold repo worktree.
 - One deliberate deviation from the spec: the reconciler (Task 5) only fixes the stuck-`running` direction. The reverse direction (engine alive after error-settle) is prevented at the source by Tasks 1–3, so no status flip-flopping is needed.
 
 ---
@@ -22,12 +22,12 @@
 The `TurnResolver` currently settles a turn as failed the instant a `StopFailure` hook arrives (`claude-interactive.ts:259-271`). The interactive CLI survives `invalid_request`/`server_error`/`unknown` API errors and usually retries, so the turn shows "failed" in chat while the CLI finishes the work. Add a 20s grace window for those error types; `rate_limit`, `billing_error`, `authentication_failed`, `max_output_tokens` keep settling immediately (the manager's wait/retry/fallback machinery depends on it).
 
 **Files:**
-- Modify: `packages/jinn/src/engines/claude-interactive.ts` (TurnResolver, ~lines 223-314)
-- Test: `packages/jinn/src/engines/__tests__/turn-resolver-grace.test.ts` (create)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts` (TurnResolver, ~lines 223-314)
+- Test: `packages/hundredfold/src/engines/__tests__/turn-resolver-grace.test.ts` (create)
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `packages/jinn/src/engines/__tests__/turn-resolver-grace.test.ts`:
+Create `packages/hundredfold/src/engines/__tests__/turn-resolver-grace.test.ts`:
 
 ```ts
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -134,12 +134,12 @@ describe("TurnResolver — StopFailure grace window", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/jinn && pnpm --filter jinn-cli exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
 Expected: FAIL — "does NOT settle immediately" fails (settles instantly), `noteActivity` not a function, `stopFailureGraceMs` unknown option (TS may also complain).
 
 - [ ] **Step 3: Implement the grace window in TurnResolver**
 
-In `packages/jinn/src/engines/claude-interactive.ts`:
+In `packages/hundredfold/src/engines/claude-interactive.ts`:
 
 Add constants above `TurnResolverOpts` (~line 222):
 
@@ -270,18 +270,18 @@ Replace `settle` so the timer can't leak:
 
 - [ ] **Step 4: Run the new tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
 Expected: PASS (9 tests)
 
 - [ ] **Step 5: Update any existing tests that assumed immediate settle**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive.test.ts`
 The existing test "settles immediately on StopFailure … and exposes it" uses `error: "rate_limit"` — rate_limit still settles immediately, so it should PASS unchanged. If any other existing test feeds a grace-eligible error (`invalid_request`/`server_error`/`unknown`) and expects an immediate settle, pass `stopFailureGraceMs: 0` plus a `await new Promise(r => setTimeout(r, 1))` flush, or switch the fixture to `rate_limit`. Make the full file green.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/engines/claude-interactive.ts packages/jinn/src/engines/__tests__/turn-resolver-grace.test.ts packages/jinn/src/engines/__tests__/claude-interactive.test.ts
+git add packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/__tests__/turn-resolver-grace.test.ts packages/hundredfold/src/engines/__tests__/claude-interactive.test.ts
 git commit -m "fix(engines): hold StopFailure in a grace window so a retrying CLI isn't declared failed"
 ```
 
@@ -292,7 +292,7 @@ git commit -m "fix(engines): hold StopFailure in a grace window so a retrying CL
 The grace window re-arms on hooks (Task 1 handles PreToolUse/PostToolUse inside `onHook`), but the strongest proof-of-life is the SSE stream itself (text deltas while the CLI retries/continues). Wire `handleSseEvent` → `resolver.noteActivity()`. Raw PTY output is deliberately NOT used — the TUI redraws its spinner even when idle, which would re-arm grace forever.
 
 **Files:**
-- Modify: `packages/jinn/src/engines/claude-interactive.ts:592-598` (`handleSseEvent`)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts:592-598` (`handleSseEvent`)
 
 - [ ] **Step 1: Implement**
 
@@ -303,8 +303,8 @@ Replace `handleSseEvent`:
    *  them to the active turn's onStream. A PTY outlives its turn, so we look up
    *  the live active entry here rather than capturing onStream at spawn.
    *  Any SSE event is also proof of life for a pending StopFailure grace window. */
-  private handleSseEvent(jinnSessionId: string, e: SseDataEvent): void {
-    const entry = this.active.get(jinnSessionId);
+  private handleSseEvent(hundredfoldSessionId: string, e: SseDataEvent): void {
+    const entry = this.active.get(hundredfoldSessionId);
     if (!entry) return; // idle PTY / no turn in flight — nothing to stream
     entry.resolver.noteActivity();
     if (!entry.onStream) return;
@@ -316,13 +316,13 @@ Replace `handleSseEvent`:
 
 - [ ] **Step 2: Run the engine test files**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/turn-resolver-grace.test.ts src/engines/__tests__/claude-interactive-race.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/turn-resolver-grace.test.ts src/engines/__tests__/claude-interactive-race.test.ts`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/engines/claude-interactive.ts
+git add packages/hundredfold/src/engines/claude-interactive.ts
 git commit -m "fix(engines): SSE stream activity re-arms the StopFailure grace window"
 ```
 
@@ -333,15 +333,15 @@ git commit -m "fix(engines): SSE stream activity re-arms the StopFailure grace w
 If grace expires and the turn settles failed, but the CLI later finishes (Stop arrives after settle), the recovered text currently has nowhere to land. Keep listening for a bounded window after an API-error settle; on a late Stop, hand the recovered text to the gateway, which appends it as a follow-up assistant message and restores a clean idle status.
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts` (EngineRunOpts)
-- Modify: `packages/jinn/src/engines/claude-interactive.ts` (engine class)
-- Modify: `packages/jinn/src/gateway/api.ts` (runWebSession engine.run opts, ~line 2260)
-- Modify: `packages/jinn/src/sessions/manager.ts` (engine.run opts, ~line 380)
-- Test: `packages/jinn/src/engines/__tests__/claude-interactive-late-recovery.test.ts` (create)
+- Modify: `packages/hundredfold/src/shared/types.ts` (EngineRunOpts)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts` (engine class)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (runWebSession engine.run opts, ~line 2260)
+- Modify: `packages/hundredfold/src/sessions/manager.ts` (engine.run opts, ~line 380)
+- Test: `packages/hundredfold/src/engines/__tests__/claude-interactive-late-recovery.test.ts` (create)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/engines/__tests__/claude-interactive-late-recovery.test.ts`:
+Create `packages/hundredfold/src/engines/__tests__/claude-interactive-late-recovery.test.ts`:
 
 ```ts
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -365,50 +365,50 @@ describe("InteractiveClaudeEngine — late-recovery supersede", () => {
 
   it("a late Stop after arming delivers the recovered text via onLateRecovery", () => {
     const recovered: Array<{ result: string; sessionId: string }> = [];
-    engine.armLateRecovery("jinn-1", {
+    engine.armLateRecovery("hundredfold-1", {
       prompt: "x", cwd: "/tmp",
       onLateRecovery: (info) => recovered.push(info),
     });
-    registry.deliver("jinn-1", { hook_event_name: "Stop", session_id: "claude-abc", last_assistant_message: "late answer" });
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", session_id: "claude-abc", last_assistant_message: "late answer" });
     expect(recovered).toEqual([{ result: "late answer", sessionId: "claude-abc" }]);
   });
 
   it("fires at most once and unregisters after delivery", () => {
     const recovered: string[] = [];
-    engine.armLateRecovery("jinn-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
-    registry.deliver("jinn-1", { hook_event_name: "Stop", last_assistant_message: "first" });
-    registry.deliver("jinn-1", { hook_event_name: "Stop", last_assistant_message: "second" });
+    engine.armLateRecovery("hundredfold-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", last_assistant_message: "first" });
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", last_assistant_message: "second" });
     expect(recovered).toEqual(["first"]);
   });
 
   it("ignores non-Stop hooks and empty messages", () => {
     const recovered: string[] = [];
-    engine.armLateRecovery("jinn-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
-    registry.deliver("jinn-1", { hook_event_name: "PostToolUse", tool_name: "Bash" });
-    registry.deliver("jinn-1", { hook_event_name: "Stop", last_assistant_message: "   " });
+    engine.armLateRecovery("hundredfold-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
+    registry.deliver("hundredfold-1", { hook_event_name: "PostToolUse", tool_name: "Bash" });
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", last_assistant_message: "   " });
     expect(recovered).toEqual([]);
   });
 
   it("cancelLateRecovery stops the listener (a new turn owns the session)", () => {
     const recovered: string[] = [];
-    engine.armLateRecovery("jinn-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
-    engine.cancelLateRecovery("jinn-1");
-    registry.deliver("jinn-1", { hook_event_name: "Stop", last_assistant_message: "too late" });
+    engine.armLateRecovery("hundredfold-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
+    engine.cancelLateRecovery("hundredfold-1");
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", last_assistant_message: "too late" });
     expect(recovered).toEqual([]);
   });
 
   it("expires after the recovery window", () => {
     const recovered: string[] = [];
-    engine.armLateRecovery("jinn-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
+    engine.armLateRecovery("hundredfold-1", { prompt: "x", cwd: "/tmp", onLateRecovery: (i) => recovered.push(i.result) });
     vi.advanceTimersByTime(10 * 60 * 1000 + 1000);
-    registry.deliver("jinn-1", { hook_event_name: "Stop", last_assistant_message: "expired" });
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", last_assistant_message: "expired" });
     expect(recovered).toEqual([]);
   });
 
   it("does nothing when opts.onLateRecovery is absent", () => {
-    engine.armLateRecovery("jinn-1", { prompt: "x", cwd: "/tmp" });
+    engine.armLateRecovery("hundredfold-1", { prompt: "x", cwd: "/tmp" });
     // No listener registered → delivery is buffered by the registry, not crashed on.
-    registry.deliver("jinn-1", { hook_event_name: "Stop", last_assistant_message: "ignored" });
+    registry.deliver("hundredfold-1", { hook_event_name: "Stop", last_assistant_message: "ignored" });
     expect(true).toBe(true);
   });
 });
@@ -418,12 +418,12 @@ Note: `HookRegistry.deliver()` buffers when no listener is registered — that's
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts`
 Expected: FAIL — `armLateRecovery` is not a function.
 
 - [ ] **Step 3: Add `onLateRecovery` to EngineRunOpts**
 
-In `packages/jinn/src/shared/types.ts`, inside `EngineRunOpts` (after `source?: string;`):
+In `packages/hundredfold/src/shared/types.ts`, inside `EngineRunOpts` (after `source?: string;`):
 
 ```ts
   /** Interactive engines only: called when a turn that already settled as
@@ -436,7 +436,7 @@ In `packages/jinn/src/shared/types.ts`, inside `EngineRunOpts` (after `source?: 
 
 - [ ] **Step 4: Implement arm/cancel in InteractiveClaudeEngine**
 
-In `packages/jinn/src/engines/claude-interactive.ts`:
+In `packages/hundredfold/src/engines/claude-interactive.ts`:
 
 Add a constant near the other timing constants (~line 322):
 
@@ -457,31 +457,31 @@ Add two methods after `isAlive` (~line 923):
 ```ts
   /** Keep listening for a late Stop after an API-error settle. Public for run(),
    *  kill(), and tests. No-op when the caller didn't provide onLateRecovery. */
-  armLateRecovery(jinnSessionId: string, opts: EngineRunOpts): void {
+  armLateRecovery(hundredfoldSessionId: string, opts: EngineRunOpts): void {
     if (!opts.onLateRecovery) return;
-    this.cancelLateRecovery(jinnSessionId);
-    const timer = setTimeout(() => this.cancelLateRecovery(jinnSessionId), LATE_RECOVERY_WINDOW_MS);
+    this.cancelLateRecovery(hundredfoldSessionId);
+    const timer = setTimeout(() => this.cancelLateRecovery(hundredfoldSessionId), LATE_RECOVERY_WINDOW_MS);
     timer.unref?.();
-    this.lateRecovery.set(jinnSessionId, { timer });
-    this.hookRegistry.register(jinnSessionId, (h) => {
+    this.lateRecovery.set(hundredfoldSessionId, { timer });
+    this.hookRegistry.register(hundredfoldSessionId, (h) => {
       if (h.hook_event_name !== "Stop") return;
       const text = String(h.last_assistant_message ?? "");
       const sid = typeof h.session_id === "string" ? h.session_id : "";
-      this.cancelLateRecovery(jinnSessionId);
+      this.cancelLateRecovery(hundredfoldSessionId);
       if (text.trim()) {
-        logger.info(`InteractiveClaudeEngine: late Stop superseded failed turn for ${jinnSessionId}`);
+        logger.info(`InteractiveClaudeEngine: late Stop superseded failed turn for ${hundredfoldSessionId}`);
         opts.onLateRecovery?.({ result: text, sessionId: sid });
       }
     });
   }
 
   /** Tear down a pending late-recovery listener (new turn starting / kill / expiry). */
-  cancelLateRecovery(jinnSessionId: string): void {
-    const lr = this.lateRecovery.get(jinnSessionId);
+  cancelLateRecovery(hundredfoldSessionId: string): void {
+    const lr = this.lateRecovery.get(hundredfoldSessionId);
     if (!lr) return;
     clearTimeout(lr.timer);
-    this.lateRecovery.delete(jinnSessionId);
-    this.hookRegistry.unregister(jinnSessionId);
+    this.lateRecovery.delete(hundredfoldSessionId);
+    this.hookRegistry.unregister(hundredfoldSessionId);
   }
 ```
 
@@ -492,7 +492,7 @@ Wire into the turn lifecycle:
 ```ts
     // A previous turn may have left a late-recovery listener armed; this new
     // turn owns the session (and the hook registration) now.
-    this.cancelLateRecovery(jinnSessionId);
+    this.cancelLateRecovery(hundredfoldSessionId);
 ```
 
 2. At the END of `run()`, immediately before `return result;` (~line 560), add:
@@ -501,7 +501,7 @@ Wire into the turn lifecycle:
     // Turn settled as an API-error failure — the CLI may still be retrying.
     // Keep listening for a late Stop so a wrong "failed" verdict self-corrects.
     if (result.error && resolver.stopFailure) {
-      this.armLateRecovery(jinnSessionId, opts);
+      this.armLateRecovery(hundredfoldSessionId, opts);
     }
 ```
 
@@ -513,12 +513,12 @@ Wire into the turn lifecycle:
 
 - [ ] **Step 5: Run the tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts src/engines/__tests__/claude-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts src/engines/__tests__/claude-interactive.test.ts`
 Expected: PASS
 
 - [ ] **Step 6: Wire the gateway handler — web path (api.ts)**
 
-In `packages/jinn/src/gateway/api.ts`, inside `runWebSession`'s `engine.run({...})` options object (after `source: currentSession.source,` ~line 2271), add:
+In `packages/hundredfold/src/gateway/api.ts`, inside `runWebSession`'s `engine.run({...})` options object (after `source: currentSession.source,` ~line 2271), add:
 
 ```ts
       // A turn that settled as failed but whose CLI later finished delivers the
@@ -540,7 +540,7 @@ In `packages/jinn/src/gateway/api.ts`, inside `runWebSession`'s `engine.run({...
         }
         context.emit("session:completed", {
           sessionId: currentSession.id,
-          employee: currentSession.employee || config.portal?.portalName || "Jinn",
+          employee: currentSession.employee || config.portal?.portalName || "Hundredfold",
           title: currentSession.title,
           result: lateText,
           error: null,
@@ -553,7 +553,7 @@ All helpers (`getSession`, `insertMessage`, `updateSession`, `notifyParentSessio
 
 - [ ] **Step 7: Wire the gateway handler — connector path (manager.ts)**
 
-In `packages/jinn/src/sessions/manager.ts`, inside the `engine.run({...})` options object that ends with `source: session.source,` (~line 381), add:
+In `packages/hundredfold/src/sessions/manager.ts`, inside the `engine.run({...})` options object that ends with `source: session.source,` (~line 381), add:
 
 ```ts
         onLateRecovery: ({ result: lateText, sessionId: engineSid }) => {
@@ -575,13 +575,13 @@ Check the imports at the top of manager.ts: `getSession`, `insertMessage`, `upda
 
 - [ ] **Step 8: Typecheck + full engine/gateway test files**
 
-Run: `pnpm --filter jinn-cli typecheck && pnpm --filter jinn-cli exec vitest run src/engines/ src/gateway/__tests__/run-web-session-connector-reply.test.ts`
+Run: `pnpm --filter hundredfold typecheck && pnpm --filter hundredfold exec vitest run src/engines/ src/gateway/__tests__/run-web-session-connector-reply.test.ts`
 Expected: PASS
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/jinn/src/shared/types.ts packages/jinn/src/engines/claude-interactive.ts packages/jinn/src/engines/__tests__/claude-interactive-late-recovery.test.ts packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/manager.ts
+git add packages/hundredfold/src/shared/types.ts packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/__tests__/claude-interactive-late-recovery.test.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/manager.ts
 git commit -m "feat(engines): late-Stop recovery supersedes a wrongly-failed interactive turn"
 ```
 
@@ -592,12 +592,12 @@ git commit -m "feat(engines): late-Stop recovery supersedes a wrongly-failed int
 Codex rollout transcripts carry explicit terminal markers (verified against live `~/.codex/sessions/**.jsonl`): `event_msg` payload `task_complete` (with `last_agent_message`) and `turn_aborted`. Use them as the primary completion signal; keep the quiet-window debounce only as a fallback, raised 800ms → 3s.
 
 **Files:**
-- Modify: `packages/jinn/src/engines/codex-interactive.ts` (parser + onParsed + constant)
-- Test: `packages/jinn/src/engines/__tests__/codex-interactive.test.ts` (extend)
+- Modify: `packages/hundredfold/src/engines/codex-interactive.ts` (parser + onParsed + constant)
+- Test: `packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts` (extend)
 
 - [ ] **Step 1: Write the failing parser tests**
 
-Append to `packages/jinn/src/engines/__tests__/codex-interactive.test.ts` (inside or alongside the existing `codexTranscriptLineToDeltas` describe block — match the file's existing import of `codexTranscriptLineToDeltas`):
+Append to `packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts` (inside or alongside the existing `codexTranscriptLineToDeltas` describe block — match the file's existing import of `codexTranscriptLineToDeltas`):
 
 ```ts
 describe("codexTranscriptLineToDeltas — terminal markers", () => {
@@ -633,12 +633,12 @@ describe("codexTranscriptLineToDeltas — terminal markers", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/codex-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/codex-interactive.test.ts`
 Expected: FAIL — `taskComplete` undefined on the first two tests.
 
 - [ ] **Step 3: Implement parser + completion wiring**
 
-In `packages/jinn/src/engines/codex-interactive.ts`:
+In `packages/hundredfold/src/engines/codex-interactive.ts`:
 
 1. Change the debounce constant (line 18) and document its new role:
 
@@ -709,13 +709,13 @@ export function codexTranscriptLineToDeltas(line: string): {
 
 - [ ] **Step 4: Run the test file**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/codex-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/codex-interactive.test.ts`
 Expected: PASS. If any pre-existing test asserts the 800ms debounce timing, update it to 3000 (or to use the constant via a timer advance).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/codex-interactive.ts packages/jinn/src/engines/__tests__/codex-interactive.test.ts
+git add packages/hundredfold/src/engines/codex-interactive.ts packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts
 git commit -m "fix(engines): codex-interactive completes on task_complete/turn_aborted markers, quiet window is fallback-only"
 ```
 
@@ -726,13 +726,13 @@ git commit -m "fix(engines): codex-interactive completes on task_complete/turn_a
 A session stuck at `status:"running"` (lost completion event, hung `runWebSession`) currently stays stuck until manual intervention. Add a 15s sweep: a `running` session whose `lastActivity` heartbeat is stale (>45s; the live heartbeat writes every 5s) and whose engine reports no active turn gets reset to `idle` + `session:completed` is emitted. One structured log line per fix.
 
 **Files:**
-- Create: `packages/jinn/src/gateway/status-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/server.ts` (start after `resumePendingWebQueueItems`, stop in cleanup)
-- Test: `packages/jinn/src/gateway/__tests__/status-reconciler.test.ts` (create)
+- Create: `packages/hundredfold/src/gateway/status-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts` (start after `resumePendingWebQueueItems`, stop in cleanup)
+- Test: `packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts` (create)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/gateway/__tests__/status-reconciler.test.ts` (DB scaffolding mirrors `sessions/__tests__/registry-pagination.test.ts` — JINN_HOME must be set before importing the registry):
+Create `packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts` (DB scaffolding mirrors `sessions/__tests__/registry-pagination.test.ts` — HUNDREDFOLD_HOME must be set before importing the registry):
 
 ```ts
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
@@ -740,8 +740,8 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-reconciler-"));
-process.env.JINN_HOME = tmp;
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-reconciler-"));
+process.env.HUNDREDFOLD_HOME = tmp;
 
 type Reg = typeof import("../../sessions/registry.js");
 type Rec = typeof import("../status-reconciler.js");
@@ -817,12 +817,12 @@ describe("status reconciler sweepOnce", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
 Expected: FAIL — module `../status-reconciler.js` not found.
 
 - [ ] **Step 3: Implement the reconciler**
 
-Create `packages/jinn/src/gateway/status-reconciler.ts`:
+Create `packages/hundredfold/src/gateway/status-reconciler.ts`:
 
 ```ts
 import type { Engine } from "../shared/types.js";
@@ -904,12 +904,12 @@ export function startStatusReconciler(deps: StatusReconcilerDeps): () => void {
 
 - [ ] **Step 4: Run the test**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
 Expected: PASS. (If `listSessions()` requires a filter argument or `title` doesn't exist on Session, adapt to the actual signatures in `sessions/registry.ts` / `shared/types.ts` — `listSessions()` with no args returns all sessions per `api.ts:460` usage.)
 
 - [ ] **Step 5: Wire into the gateway lifecycle**
 
-In `packages/jinn/src/gateway/server.ts`:
+In `packages/hundredfold/src/gateway/server.ts`:
 
 1. Add the import near the other gateway imports:
 
@@ -933,13 +933,13 @@ import { startStatusReconciler } from "./status-reconciler.js";
 
 - [ ] **Step 6: Typecheck + run gateway tests**
 
-Run: `pnpm --filter jinn-cli typecheck && pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/`
+Run: `pnpm --filter hundredfold typecheck && pnpm --filter hundredfold exec vitest run src/gateway/__tests__/`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/status-reconciler.ts packages/jinn/src/gateway/__tests__/status-reconciler.test.ts packages/jinn/src/gateway/server.ts
+git add packages/hundredfold/src/gateway/status-reconciler.ts packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts packages/hundredfold/src/gateway/server.ts
 git commit -m "feat(gateway): status reconciler sweep unsticks sessions stuck at running"
 ```
 
@@ -950,12 +950,12 @@ git commit -m "feat(gateway): status reconciler sweep unsticks sessions stuck at
 `buildOrgContext` currently appends a persona-preview line per employee (~120 chars each + formatting). Collapse to `Name (slug) — dept, rank` with one pointer line for details. Applies to both the hierarchy path and the filesystem-fallback path.
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts:385-456` (`buildOrgContext`)
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts` (extend/update)
+- Modify: `packages/hundredfold/src/sessions/context.ts:385-456` (`buildOrgContext`)
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts` (extend/update)
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `packages/jinn/src/sessions/__tests__/context.test.ts` (a hierarchy fixture may already exist in the file — reuse its shape; `OrgHierarchy` is `{ nodes: Record<string, OrgNode>, sorted: string[] }` per `shared/types.ts`):
+Add to `packages/hundredfold/src/sessions/__tests__/context.test.ts` (a hierarchy fixture may already exist in the file — reuse its shape; `OrgHierarchy` is `{ nodes: Record<string, OrgNode>, sorted: string[] }` per `shared/types.ts`):
 
 ```ts
 describe("buildContext — compact org roster", () => {
@@ -987,7 +987,7 @@ describe("buildContext — compact org roster", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Expected: the two new tests FAIL (persona preview present, pointer line absent).
 
 - [ ] **Step 3: Implement**
@@ -1018,13 +1018,13 @@ and replace its trailing line (451) with the same pointer line as above.
 
 - [ ] **Step 4: Run the context tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Expected: new tests PASS; fix any pre-existing assertions that expected persona previews in the org section.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/__tests__/context.test.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/__tests__/context.test.ts
 git commit -m "perf(context): compact org roster — name/dept/rank only, personas on demand"
 ```
 
@@ -1035,8 +1035,8 @@ git commit -m "perf(context): compact org roster — name/dept/rank only, person
 Employee sessions stop receiving the org roster, the cron list, and the full API table. The API reference becomes audience-specific (COO: one pointer line; managers: 4-line delegation mini-ref; others: attachments only). Connector recipes slim to two lines (full examples move to CLAUDE.md in Task 8).
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts` (`buildContext`, `buildApiReference`, `buildConnectorContext`)
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts` (extend)
+- Modify: `packages/hundredfold/src/sessions/context.ts` (`buildContext`, `buildApiReference`, `buildConnectorContext`)
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts` (extend)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1099,7 +1099,7 @@ describe("buildContext — audience scoping", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Expected: new tests FAIL.
 
 - [ ] **Step 3: Implement scoping in `buildContext`**
@@ -1134,7 +1134,7 @@ In `context.ts`:
         tier: Tier.STANDARD,
         marker: "## Scheduled cron",
         content: cronCtx,
-        summary: "## Scheduled cron jobs\nCron definitions are in `~/.jinn/cron/jobs.json`. Read directly when needed.",
+        summary: "## Scheduled cron jobs\nCron definitions are in `~/.hundredfold/cron/jobs.json`. Read directly when needed.",
       });
     }
   }
@@ -1189,7 +1189,7 @@ function buildConnectorContext(connectors: string[], gatewayUrl: string): string
   return [
     `## Available connectors: ${connectors.join(", ")}`,
     `Send a message: \`curl -X POST ${gatewayUrl}/api/connectors/<name>/send -H 'Content-Type: application/json' -d '{"channel":"CHANNEL_ID","text":"message"}'\` (add \`"thread":"THREAD_TS"\` for a threaded reply).`,
-    `Channel IDs are in \`~/.jinn/config.yaml\`. You may send proactively (completed tasks, errors, status updates). Details: CLAUDE.md / AGENTS.md.`,
+    `Channel IDs are in \`~/.hundredfold/config.yaml\`. You may send proactively (completed tasks, errors, status updates). Details: CLAUDE.md / AGENTS.md.`,
   ].join("\n");
 }
 ```
@@ -1198,18 +1198,18 @@ and update its call site (line 196) to `buildConnectorContext(opts.connectors, g
 
 - [ ] **Step 4: Run the context tests + fix pre-existing assertions**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Pre-existing tests asserting the full API table, connector recipes, or org/cron presence for employee sessions will fail — update them to the new contract (they are locking the OLD output by design; the file's header comment says so).
 
 - [ ] **Step 5: Typecheck + full sessions tests**
 
-Run: `pnpm --filter jinn-cli typecheck && pnpm --filter jinn-cli exec vitest run src/sessions/`
+Run: `pnpm --filter hundredfold typecheck && pnpm --filter hundredfold exec vitest run src/sessions/`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/__tests__/context.test.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/__tests__/context.test.ts
 git commit -m "perf(context): audience-scope buildContext — employees lose org/cron/API-table, recipes dedupe to CLAUDE.md"
 ```
 
@@ -1220,7 +1220,7 @@ git commit -m "perf(context): audience-scope buildContext — employees lose org
 The injected context now points at CLAUDE.md for the API table and connector recipes — the template must actually contain them, and must tell employee sessions (which auto-ingest the same file via AGENTS.md symlink) which parts apply to them.
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
 
 - [ ] **Step 1: Add the role marker**
 
@@ -1262,7 +1262,7 @@ The gateway base URL (host:port) is provided in your session context under "Curr
 | `/api/connectors/:name/send` | POST | Send message via connector (`{channel, text, thread?}`) |
 | `/api/logs` | GET | Recent log lines |
 
-**Attachments** — when you produce a file (chart, screenshot, PDF) and want it in the web chat, POST its local path to your own session. The file is copied into `~/.jinn/uploads/` and rendered inline (images/audio inline, other types as a download card). Attachments render in the web chat view only — never in the raw CLI/xterm stream.
+**Attachments** — when you produce a file (chart, screenshot, PDF) and want it in the web chat, POST its local path to your own session. The file is copied into `~/.hundredfold/uploads/` and rendered inline (images/audio inline, other types as a download card). Attachments render in the web chat view only — never in the raw CLI/xterm stream.
 
 ```bash
 curl -s -X POST <gateway>/api/sessions/<your-session-id>/attachments \
@@ -1270,7 +1270,7 @@ curl -s -X POST <gateway>/api/sessions/<your-session-id>/attachments \
   -d '{"path":"/tmp/chart.png","text":"Here is the chart"}'
 ```
 
-**Connectors** — send a message through any configured connector (channel IDs live in `~/.jinn/config.yaml`); add `"thread":"THREAD_TS"` for a threaded reply. You may send proactively — completed tasks, errors, status updates:
+**Connectors** — send a message through any configured connector (channel IDs live in `~/.hundredfold/config.yaml`); add `"thread":"THREAD_TS"` for a threaded reply. You may send proactively — completed tasks, errors, status updates:
 
 ```bash
 curl -X POST <gateway>/api/connectors/slack/send \
@@ -1281,24 +1281,24 @@ curl -X POST <gateway>/api/connectors/slack/send \
 
 - [ ] **Step 3: Check the template renders (placeholder sanity)**
 
-Run: `grep -n "{{" ~/Projects/jinn/packages/jinn/template/CLAUDE.md | grep -v "portalName\|portalSlug"`
-Expected: no output (only the two known placeholders are used). Also run the template/setup tests if present: `pnpm --filter jinn-cli exec vitest run src/cli/` — expected PASS.
+Run: `grep -n "{{" ~/Projects/hundredfold/packages/hundredfold/template/CLAUDE.md | grep -v "portalName\|portalSlug"`
+Expected: no output (only the two known placeholders are used). Also run the template/setup tests if present: `pnpm --filter hundredfold exec vitest run src/cli/` — expected PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/template/CLAUDE.md
+git add packages/hundredfold/template/CLAUDE.md
 git commit -m "docs(template): CLAUDE.md carries the API reference + role marker — injected context dedupes against it"
 ```
 
 ---
 
-### Task 9: Live instance — update `~/.jinn/CLAUDE.md` (separate repo)
+### Task 9: Live instance — update `~/.hundredfold/CLAUDE.md` (separate repo)
 
-The operator's live CLAUDE.md predates this dedupe: it lacks the Gateway API table (the injected context used to provide it) and has no role marker for the 42 employees that auto-ingest it. Edit in place; commit in the `~/.jinn` git repo (NOT the jinn worktree). Do not touch any other dirty files in `~/.jinn`.
+The operator's live CLAUDE.md predates this dedupe: it lacks the Gateway API table (the injected context used to provide it) and has no role marker for the 42 employees that auto-ingest it. Edit in place; commit in the `~/.hundredfold` git repo (NOT the hundredfold worktree). Do not touch any other dirty files in `~/.hundredfold`.
 
 **Files:**
-- Modify: `~/.jinn/CLAUDE.md`
+- Modify: `~/.hundredfold/CLAUDE.md`
 
 - [ ] **Step 1: Add the role marker**
 
@@ -1312,26 +1312,26 @@ After the opening line ("You are Jimbo, the COO of the user's AI organization.")
 
 Insert the same "## Gateway API Reference" section from Task 8 Step 2 (table + attachments recipe + connector example), with `<gateway>` spelled as `http://0.0.0.0:7777` is NOT hardcoded — keep the `<gateway>` placeholder wording ("base URL is in your session context"). Place it after the "## Toolbox" section.
 
-- [ ] **Step 3: Commit in ~/.jinn only**
+- [ ] **Step 3: Commit in ~/.hundredfold only**
 
 ```bash
-cd ~/.jinn && git add CLAUDE.md && git commit -m "docs: role marker + gateway API reference (context-hygiene dedupe)"
+cd ~/.hundredfold && git add CLAUDE.md && git commit -m "docs: role marker + gateway API reference (context-hygiene dedupe)"
 ```
 
-(`~/.jinn` has unrelated dirty files — stage ONLY `CLAUDE.md`.)
+(`~/.hundredfold` has unrelated dirty files — stage ONLY `CLAUDE.md`.)
 
 ---
 
 ### Task 10: Full verification
 
-- [ ] **Step 1: Full jinn-cli suite + typecheck**
+- [ ] **Step 1: Full hundredfold suite + typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm --filter jinn-cli exec vitest run && pnpm --filter jinn-cli typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold exec vitest run && pnpm --filter hundredfold typecheck`
 Expected: all tests PASS (was 444 + new ones), typecheck clean.
 
 - [ ] **Step 2: Web package untouched but verify it still builds/tests**
 
-Run: `pnpm --filter @jinn/web exec vitest run && pnpm --filter @jinn/web typecheck`
+Run: `pnpm --filter @hundredfold/web exec vitest run && pnpm --filter @hundredfold/web typecheck`
 Expected: PASS (no web changes in this plan; this guards against accidental type ripple through shared types).
 
 - [ ] **Step 3: Context-size spot check**
@@ -1339,7 +1339,7 @@ Expected: PASS (no web changes in this plan; this guards against accidental type
 Run a quick size probe (script, not committed):
 
 ```bash
-cd ~/Projects/jinn/packages/jinn && pnpm exec tsx -e "
+cd ~/Projects/hundredfold/packages/hundredfold && pnpm exec tsx -e "
 import { buildContext } from './src/sessions/context.js';
 const coo = buildContext({ source: 'web', channel: 'c', user: 'u' });
 const emp = buildContext({ source: 'web', channel: 'c', user: 'u', employee: { name: 'w', displayName: 'W', department: 'd', rank: 'employee', engine: 'claude', model: 'opus', persona: 'You write blogs.' } });
@@ -1347,7 +1347,7 @@ console.log('COO chars:', coo.length, 'EMPLOYEE chars:', emp.length);
 "
 ```
 
-Expected: employee context is dramatically smaller than before (no org/cron/API table). Note: this runs against the live `~/.jinn` data (JINN_HOME default) — numbers reflect the real instance. Record both numbers in the final report.
+Expected: employee context is dramatically smaller than before (no org/cron/API table). Note: this runs against the live `~/.hundredfold` data (HUNDREDFOLD_HOME default) — numbers reflect the real instance. Record both numbers in the final report.
 
 - [ ] **Step 4: Commit any stragglers, push is NOT automatic**
 

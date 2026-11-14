@@ -22,7 +22,7 @@ export function createKit({ browser, headers, baseUrl }) {
    */
   async function open(viewport, url, { touch = viewport.width < 600, before } = {}) {
     const context = await browser.newContext({ viewport, hasTouch: touch, extraHTTPHeaders: headers })
-    await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+    await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
     await before?.(context)
     const page = await context.newPage()
     const errors = []

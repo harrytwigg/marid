@@ -22,7 +22,7 @@ describe('ChatMessages tool groups', () => {
     ['find_matches', Search],
     ['WebFetch', Globe],
     ['unknown_tool', Wrench],
-    ['mcp__jinn__FILE_EDIT', FileText],
+    ['mcp__hundredfold__FILE_EDIT', FileText],
   ])('maps %s to its tool-kind glyph', (toolName, expectedGlyph) => {
     expect(toolGlyphForName(toolName)).toBe(expectedGlyph)
   })

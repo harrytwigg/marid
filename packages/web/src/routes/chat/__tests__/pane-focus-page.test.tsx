@@ -132,13 +132,13 @@ describe('desktop pane focus', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Clear debug log' })).toBeTruthy()
 
     fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'CLI' }))
-    await waitFor(() => expect(localStorage.getItem('jinn-view-mode-b')).toBe('cli'))
+    await waitFor(() => expect(localStorage.getItem('hundredfold-view-mode-b')).toBe('cli'))
     await waitFor(() => expect(paneB.textContent).not.toContain('transcript-b'))
 
     fireEvent.pointerDown(within(paneB).getByRole('button', { name: 'Actions for Title b' }), { button: 0, ctrlKey: false })
     menu = await screen.findByRole('menu')
     fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Chat' }))
-    await waitFor(() => expect(localStorage.getItem('jinn-view-mode-b')).toBe('chat'))
+    await waitFor(() => expect(localStorage.getItem('hundredfold-view-mode-b')).toBe('chat'))
     await waitFor(() => expect(paneB.textContent).toContain('transcript-b'))
   })
 

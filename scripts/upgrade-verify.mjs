@@ -9,6 +9,7 @@ import {
   deriveScenarioPort,
   hashUpgradeSurface,
   installTarball,
+  BASELINE_PACKAGE,
   latestPublishedTarball,
   listFiles,
   listSkillNames,
@@ -51,18 +52,18 @@ function poisonVersionMarker(home) {
   const config = path.join(home, "config.yaml")
   const source = fs.readFileSync(config, "utf8")
   const updated = source.replace(/^(\s+version:\s*)[^\n]+$/m, "$1\"0.0.0-upgrade-verify\"")
-  if (updated === source) throw new Error("baseline config has no jinn.version marker")
+  if (updated === source) throw new Error("baseline config has no hundredfold.version marker")
   fs.writeFileSync(config, updated)
 }
 
 function assertVersionStamped(home, version) {
   const source = fs.readFileSync(path.join(home, "config.yaml"), "utf8")
   const match = /^\s+version:\s*["']?([^"'\s]+)["']?\s*$/m.exec(source)
-  if (match?.[1] !== version) throw new Error(`jinn.version was ${match?.[1] ?? "missing"}, expected ${version}`)
+  if (match?.[1] !== version) throw new Error(`hundredfold.version was ${match?.[1] ?? "missing"}, expected ${version}`)
 }
 
 function assertReceipt(home, version, skills) {
-  const receipt = JSON.parse(fs.readFileSync(path.join(home, ".jinn-template-skills.json"), "utf8"))
+  const receipt = JSON.parse(fs.readFileSync(path.join(home, ".hundredfold-template-skills.json"), "utf8"))
   if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(["skills", "version"])) {
     throw new Error("template-skills receipt has unexpected fields")
   }
@@ -219,7 +220,7 @@ export async function main(argv = process.argv.slice(2)) {
     const scenarios = []
     for (const scenario of SCENARIOS) scenarios.push(await verifyScenario({ scenario, root, baseline, candidate }))
     result = { baselineVersion: baseline.version, candidateSha256: candidate.sha256, scenarios }
-    console.log(`PASS published jinn-cli@${baseline.version} -> candidate jinn-cli@${scenarios[0].candidateVersion} sha256=${candidate.sha256}`)
+    console.log(`PASS published ${BASELINE_PACKAGE}@${baseline.version} -> candidate hundredfold@${scenarios[0].candidateVersion} sha256=${candidate.sha256}`)
     for (const item of scenarios) console.log(`PASS ${item.scenario} port=${item.port} rewritten=${item.rewritten} added=${item.added.length} restoredMissing=${item.restoredMissing ?? "n/a"} retired=${item.retired.length} preservedModified=${item.preservedModified ?? "n/a"} backup=${item.backup}`)
     return result
   } finally {

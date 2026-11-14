@@ -1,4 +1,4 @@
-const STORAGE_KEY = "jinn-talk-browser-instance"
+const STORAGE_KEY = "hundredfold-talk-browser-instance"
 let fallback: string | null = null
 
 function freshId(): string {

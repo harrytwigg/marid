@@ -1,427 +1,427 @@
 {
   "_instructions": "Every entry is code that predates the lint floor, exempt from exactly the rules listed. To leave the list: split the function at its seams into named helpers, give the branchy part its own function with an early return per case, hoist a nested loop or condition into a helper so the body reads flat, group related parameters into one options object, await the promise or hand it to `void`. Then run `node scripts/eslint-baseline.mjs` and commit the shrunken file. Add nothing here by hand — inline eslint-disable comments are ignored outright, so this file is the only suppression channel, and it is meant to shrink.",
   "files": {
-    "packages/jinn/scripts/instance-migration-bundle.mjs": [
+    "packages/hundredfold/scripts/instance-migration-bundle.mjs": [
       "complexity"
     ],
-    "packages/jinn/src/cli/container-contract.ts": [
+    "packages/hundredfold/src/cli/container-contract.ts": [
       "complexity"
     ],
-    "packages/jinn/src/cli/limits.ts": [
+    "packages/hundredfold/src/cli/limits.ts": [
       "complexity"
     ],
-    "packages/jinn/src/cli/nuke.ts": [
+    "packages/hundredfold/src/cli/nuke.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/cli/pair.ts": [
+    "packages/hundredfold/src/cli/pair.ts": [
       "max-depth"
     ],
-    "packages/jinn/src/cli/setup.ts": [
+    "packages/hundredfold/src/cli/setup.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/cli/skills.ts": [
+    "packages/hundredfold/src/cli/skills.ts": [
       "max-depth"
     ],
-    "packages/jinn/src/cli/start.ts": [
+    "packages/hundredfold/src/cli/start.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/cli/status.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/connectors/discord/index.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/connectors/slack/index.ts": [
+    "packages/hundredfold/src/cli/status.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/connectors/telegram/index.ts": [
+    "packages/hundredfold/src/connectors/discord/index.ts": [
+      "complexity",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/connectors/slack/index.ts": [
+      "complexity",
+      "max-depth",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/connectors/telegram/index.ts": [
       "@typescript-eslint/no-floating-promises",
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/connectors/whatsapp/index.ts": [
+    "packages/hundredfold/src/connectors/whatsapp/index.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/cron/runner.ts": [
+    "packages/hundredfold/src/cron/runner.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/cron/validation.ts": [
+    "packages/hundredfold/src/cron/validation.ts": [
       "complexity"
     ],
-    "packages/jinn/src/engines/__tests__/claude-interactive.test.ts": [
+    "packages/hundredfold/src/engines/__tests__/claude-interactive.test.ts": [
       "@typescript-eslint/no-floating-promises"
     ],
-    "packages/jinn/src/engines/antigravity-protocol.ts": [
+    "packages/hundredfold/src/engines/antigravity-protocol.ts": [
       "complexity"
     ],
-    "packages/jinn/src/engines/antigravity.ts": [
+    "packages/hundredfold/src/engines/antigravity.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/claude-interactive.ts": [
+    "packages/hundredfold/src/engines/claude-interactive.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/claude-permission-prompt.ts": [
+    "packages/hundredfold/src/engines/claude-permission-prompt.ts": [
       "max-depth"
     ],
-    "packages/jinn/src/engines/codex-interactive.ts": [
+    "packages/hundredfold/src/engines/codex-interactive.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/codex.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/engines/grok-interactive.ts": [
+    "packages/hundredfold/src/engines/codex.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/grok-mcp.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/engines/grok.ts": [
+    "packages/hundredfold/src/engines/grok-interactive.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/hermes-acp.ts": [
+    "packages/hundredfold/src/engines/grok-mcp.ts": [
+      "complexity",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/engines/grok.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/hermes-jsonrpc.ts": [
+    "packages/hundredfold/src/engines/hermes-acp.ts": [
+      "complexity",
+      "max-depth",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/engines/hermes-jsonrpc.ts": [
       "@typescript-eslint/no-floating-promises",
       "complexity"
     ],
-    "packages/jinn/src/engines/hermes-mcp.ts": [
+    "packages/hundredfold/src/engines/hermes-mcp.ts": [
       "complexity"
     ],
-    "packages/jinn/src/engines/hermes-protocol.ts": [
+    "packages/hundredfold/src/engines/hermes-protocol.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/pi.ts": [
+    "packages/hundredfold/src/engines/pi.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/pty-snapshot.ts": [
+    "packages/hundredfold/src/engines/pty-snapshot.ts": [
       "complexity"
     ],
-    "packages/jinn/src/engines/pty-stream.ts": [
+    "packages/hundredfold/src/engines/pty-stream.ts": [
       "max-lines-per-function"
     ],
-    "packages/jinn/src/engines/sse-pty-proxy.ts": [
+    "packages/hundredfold/src/engines/sse-pty-proxy.ts": [
       "max-lines-per-function",
       "max-params"
     ],
-    "packages/jinn/src/engines/transcript-tailer.ts": [
+    "packages/hundredfold/src/engines/transcript-tailer.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/api.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function",
-      "max-params"
-    ],
-    "packages/jinn/src/gateway/approval-authority.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/gateway/auth.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/gateway/byte-range.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/gateway/chat-activity.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/gateway/external-turns.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/gateway/files.ts": [
+    "packages/hundredfold/src/gateway/api.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function",
       "max-params"
     ],
-    "packages/jinn/src/gateway/hook-endpoint.ts": [
+    "packages/hundredfold/src/gateway/approval-authority.ts": [
+      "complexity",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/gateway/auth.ts": [
       "complexity"
     ],
-    "packages/jinn/src/gateway/http-helpers.ts": [
+    "packages/hundredfold/src/gateway/byte-range.ts": [
+      "complexity"
+    ],
+    "packages/hundredfold/src/gateway/chat-activity.ts": [
+      "complexity"
+    ],
+    "packages/hundredfold/src/gateway/external-turns.ts": [
+      "complexity",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/gateway/files.ts": [
+      "complexity",
+      "max-depth",
+      "max-lines-per-function",
+      "max-params"
+    ],
+    "packages/hundredfold/src/gateway/hook-endpoint.ts": [
+      "complexity"
+    ],
+    "packages/hundredfold/src/gateway/http-helpers.ts": [
       "complexity",
       "max-depth"
     ],
-    "packages/jinn/src/gateway/lifecycle.ts": [
+    "packages/hundredfold/src/gateway/lifecycle.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/manager-visibility.ts": [
+    "packages/hundredfold/src/gateway/manager-visibility.ts": [
       "complexity"
     ],
-    "packages/jinn/src/gateway/media-type.ts": [
+    "packages/hundredfold/src/gateway/media-type.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/org-hierarchy.ts": [
+    "packages/hundredfold/src/gateway/org-hierarchy.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/org.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/gateway/pty-ws.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/gateway/server.ts": [
+    "packages/hundredfold/src/gateway/org.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/session-comm-guards.ts": [
+    "packages/hundredfold/src/gateway/pty-ws.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/skills.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/gateway/status-reconciler.ts": [
+    "packages/hundredfold/src/gateway/server.ts": [
       "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/gateway/streamed-blocks.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/gateway/watcher.ts": [
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/instances/access.ts": [
+    "packages/hundredfold/src/gateway/session-comm-guards.ts": [
+      "complexity",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/gateway/skills.ts": [
       "complexity"
     ],
-    "packages/jinn/src/instances/create.ts": [
+    "packages/hundredfold/src/gateway/status-reconciler.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/instances/directory.ts": [
+    "packages/hundredfold/src/gateway/streamed-blocks.ts": [
       "complexity"
     ],
-    "packages/jinn/src/instances/start.ts": [
+    "packages/hundredfold/src/gateway/watcher.ts": [
+      "max-depth",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/instances/access.ts": [
       "complexity"
     ],
-    "packages/jinn/src/mcp/approval-tools.ts": [
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/mcp/attachment.ts": [
+    "packages/hundredfold/src/instances/create.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/delegation-tools.ts": [
+    "packages/hundredfold/src/instances/directory.ts": [
+      "complexity"
+    ],
+    "packages/hundredfold/src/instances/start.ts": [
+      "complexity"
+    ],
+    "packages/hundredfold/src/mcp/approval-tools.ts": [
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/mcp/attachment.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/file-tools.ts": [
+    "packages/hundredfold/src/mcp/delegation-tools.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/knowledge-tools.ts": [
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/mcp/note-tools.ts": [
+    "packages/hundredfold/src/mcp/file-tools.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/org-tools.ts": [
+    "packages/hundredfold/src/mcp/knowledge-tools.ts": [
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/resolver.ts": [
+    "packages/hundredfold/src/mcp/note-tools.ts": [
+      "complexity",
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/mcp/org-tools.ts": [
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/mcp/resolver.ts": [
       "@typescript-eslint/no-unused-vars",
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/search-tools.ts": [
+    "packages/hundredfold/src/mcp/search-tools.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/server.ts": [
+    "packages/hundredfold/src/mcp/server.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/session-tools.ts": [
+    "packages/hundredfold/src/mcp/session-tools.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/temp-sandbox.ts": [
+    "packages/hundredfold/src/mcp/temp-sandbox.ts": [
       "complexity"
     ],
-    "packages/jinn/src/mcp/toolkit.ts": [
+    "packages/hundredfold/src/mcp/toolkit.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/mcp/work-item-tools.ts": [
+    "packages/hundredfold/src/mcp/work-item-tools.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/notes/store.ts": [
+    "packages/hundredfold/src/notes/store.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/sessions/callbacks.ts": [
+    "packages/hundredfold/src/sessions/callbacks.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/sessions/context.ts": [
+    "packages/hundredfold/src/sessions/context.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function",
       "max-params"
     ],
-    "packages/jinn/src/sessions/delegation-completion-contract.ts": [
+    "packages/hundredfold/src/sessions/delegation-completion-contract.ts": [
       "complexity"
     ],
-    "packages/jinn/src/sessions/fork.ts": [
+    "packages/hundredfold/src/sessions/fork.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/sessions/manager.ts": [
+    "packages/hundredfold/src/sessions/manager.ts": [
       "complexity",
       "max-lines-per-function",
       "max-params"
     ],
-    "packages/jinn/src/sessions/migrate.ts": [
+    "packages/hundredfold/src/sessions/migrate.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/sessions/partial-stream.ts": [
+    "packages/hundredfold/src/sessions/partial-stream.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/sessions/rate-limit-handler.ts": [
+    "packages/hundredfold/src/sessions/rate-limit-handler.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/sessions/registry.ts": [
+    "packages/hundredfold/src/sessions/registry.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function",
       "max-params"
     ],
-    "packages/jinn/src/sessions/session-patch.ts": [
+    "packages/hundredfold/src/sessions/session-patch.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/shared/activity-receipts.ts": [
+    "packages/hundredfold/src/shared/activity-receipts.ts": [
       "complexity"
     ],
-    "packages/jinn/src/shared/blocks.ts": [
+    "packages/hundredfold/src/shared/blocks.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/shared/claude-models.ts": [
+    "packages/hundredfold/src/shared/claude-models.ts": [
       "complexity"
     ],
-    "packages/jinn/src/shared/claude-settings.ts": [
+    "packages/hundredfold/src/shared/claude-settings.ts": [
       "complexity"
     ],
-    "packages/jinn/src/shared/codex-models.ts": [
+    "packages/hundredfold/src/shared/codex-models.ts": [
       "complexity"
     ],
-    "packages/jinn/src/shared/config.ts": [
+    "packages/hundredfold/src/shared/config.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/shared/db.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/shared/effort.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/shared/engine-limits.ts": [
+    "packages/hundredfold/src/shared/db.ts": [
       "complexity",
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/shared/grok-models.ts": [
+    "packages/hundredfold/src/shared/effort.ts": [
+      "complexity"
+    ],
+    "packages/hundredfold/src/shared/engine-limits.ts": [
+      "complexity",
+      "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/shared/hermes-models.ts": [
+    "packages/hundredfold/src/shared/grok-models.ts": [
+      "max-lines-per-function"
+    ],
+    "packages/hundredfold/src/shared/hermes-models.ts": [
       "complexity"
     ],
-    "packages/jinn/src/shared/models.ts": [
+    "packages/hundredfold/src/shared/models.ts": [
       "complexity"
     ],
-    "packages/jinn/src/shared/pi-models.ts": [
+    "packages/hundredfold/src/shared/pi-models.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/stt/model-store.ts": [
+    "packages/hundredfold/src/stt/model-store.ts": [
       "complexity",
       "max-depth"
     ],
-    "packages/jinn/src/stt/settings-store.ts": [
+    "packages/hundredfold/src/stt/settings-store.ts": [
       "complexity"
     ],
-    "packages/jinn/src/stt/stt.ts": [
+    "packages/hundredfold/src/stt/stt.ts": [
       "max-lines-per-function"
     ],
-    "packages/jinn/src/talk/kokoro.ts": [
+    "packages/hundredfold/src/talk/kokoro.ts": [
       "max-lines-per-function"
     ],
-    "packages/jinn/src/talk/speakable.ts": [
+    "packages/hundredfold/src/talk/speakable.ts": [
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/approvals.ts": [
+    "packages/hundredfold/src/work-items/approvals.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/attachments.ts": [
+    "packages/hundredfold/src/work-items/attachments.ts": [
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/migrate.ts": [
+    "packages/hundredfold/src/work-items/migrate.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/reconcile.ts": [
+    "packages/hundredfold/src/work-items/reconcile.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/store.ts": [
+    "packages/hundredfold/src/work-items/store.ts": [
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/transitions.ts": [
+    "packages/hundredfold/src/work-items/transitions.ts": [
       "complexity",
       "max-lines-per-function"
     ],

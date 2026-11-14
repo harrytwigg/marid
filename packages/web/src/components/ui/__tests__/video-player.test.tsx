@@ -14,10 +14,10 @@ describe("VideoPlayer", () => {
   })
 
   it("shows an optimistic local video preview with a play affordance", () => {
-    render(<VideoPlayer src="blob:http://jinn.local/clip" name="clip.mp4" />)
+    render(<VideoPlayer src="blob:http://hundredfold.local/clip" name="clip.mp4" />)
 
     const preview = screen.getByTestId("video-player-preview") as HTMLVideoElement
-    expect(preview.getAttribute("src")).toBe("blob:http://jinn.local/clip")
+    expect(preview.getAttribute("src")).toBe("blob:http://hundredfold.local/clip")
     expect(preview.controls).toBe(false)
     expect(screen.queryByTestId("video-player-element")).toBeNull()
     expect(screen.getByLabelText("Play clip.mp4")).toBeTruthy()

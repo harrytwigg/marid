@@ -8,13 +8,13 @@ import { queryClient } from "./query-client"
 import { nativeBridge } from "@/platform/native-bridge"
 
 const PROFILE_BOUND_KEYS = [
-  "jinn-chat-tabs",
-  "jinn-read-sessions",
-  "jinn-sidebar-collapsed",
-  "jinn-sidebar-expanded",
-  "jinn-notes-last-location",
+  "hundredfold-chat-tabs",
+  "hundredfold-read-sessions",
+  "hundredfold-sidebar-collapsed",
+  "hundredfold-sidebar-expanded",
+  "hundredfold-notes-last-location",
 ] as const
-const PROFILE_BOUND_PREFIXES = ["jinn-intermediate-", "jinn-view-mode-", "jinn-note-draft-"] as const
+const PROFILE_BOUND_PREFIXES = ["hundredfold-intermediate-", "hundredfold-view-mode-", "hundredfold-note-draft-"] as const
 
 let manager: NativeGatewayProfiles | undefined
 

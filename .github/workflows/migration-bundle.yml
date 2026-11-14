@@ -2,7 +2,7 @@ name: Migration bundle
 
 # The release skill runs the same check before tagging; catching a stale bundle
 # here makes it one more commit on a PR instead of a scramble at release time.
-# The bundle is derived from a diff of packages/jinn/template/, so any
+# The bundle is derived from a diff of packages/hundredfold/template/, so any
 # edit under it can stale the bundle, not only edits to template/migrations/.
 #
 # Path-filtered workflows report nothing on PRs that miss their paths, so this
@@ -10,8 +10,8 @@ name: Migration bundle
 on:
   pull_request:
     paths:
-      - "packages/jinn/template/**"
-      - "packages/jinn/scripts/instance-migration-bundle.mjs"
+      - "packages/hundredfold/template/**"
+      - "packages/hundredfold/scripts/instance-migration-bundle.mjs"
 
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PACKAGE_VERSION="$(node -p "require('./packages/jinn/package.json').version")"
-          VERSION="$(find packages/jinn/template/migrations -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
+          PACKAGE_VERSION="$(node -p "require('./packages/hundredfold/package.json').version")"
+          VERSION="$(find packages/hundredfold/template/migrations -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
           test -n "$VERSION"
           if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Checking unreleased migration $VERSION while package remains at $PACKAGE_VERSION"
@@ -59,4 +59,4 @@ jobs:
             echo "::error::No release tag (v*) is reachable from this commit, so there is no base to diff the template against. The release tags must be present in this repository for the check to run."
             exit 1
           fi
-          pnpm --filter jinn-cli migration:check -- --base-ref "$BASE" --version "$VERSION" --allow-unreleased
+          pnpm --filter hundredfold migration:check -- --base-ref "$BASE" --version "$VERSION" --allow-unreleased

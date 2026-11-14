@@ -1,5 +1,5 @@
 import type React from "react"
-import { fallbackLinkLabel, type FallbackLink } from "@jinn/fallback-chain-wire"
+import { fallbackLinkLabel, type FallbackLink } from "@hundredfold/fallback-chain-wire"
 import { ChevronDown, ChevronUp, GripVertical, X } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { SettingsSelect } from "../shared"

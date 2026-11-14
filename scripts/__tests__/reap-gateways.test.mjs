@@ -12,13 +12,13 @@ import { buildContext, mapPidsToHomes } from "../reap/protected.mjs"
 const REAP = fileURLToPath(new URL("../reap-sandboxes.mjs", import.meta.url))
 
 const TEMP = os.tmpdir()
-const DEFAULT_HOME = path.join(TEMP, "reap-fixture", ".jinn")
-const REGISTERED_HOME = path.join(TEMP, "reap-fixture", ".jinn-second")
-const SETTLED_HOME = path.join(os.homedir(), ".jinn-unregistered")
-const SANDBOX_HOME = path.join(TEMP, "jinn-sandbox-abc")
+const DEFAULT_HOME = path.join(TEMP, "reap-fixture", ".hundredfold")
+const REGISTERED_HOME = path.join(TEMP, "reap-fixture", ".hundredfold-second")
+const SETTLED_HOME = path.join(os.homedir(), ".hundredfold-unregistered")
+const SANDBOX_HOME = path.join(TEMP, "hundredfold-sandbox-abc")
 const WORKTREES_ROOT = path.join(TEMP, "reap-fixture", ".worktrees")
 
-const GATEWAY_ARGS = "node /repo/packages/jinn/dist/src/gateway/daemon-entry.js"
+const GATEWAY_ARGS = "node /repo/packages/hundredfold/dist/src/gateway/daemon-entry.js"
 
 /**
  * The fixture context every case starts from. `registeredHomes` deliberately
@@ -82,14 +82,14 @@ const CASES = [
   {
     name: "a home under the system temp dir, older than the age guard, is reapable",
     candidate: gateway(9006),
-    context: context({ homeByPid: { 9006: path.join(TEMP, "jinn-home-xyz") } }),
+    context: context({ homeByPid: { 9006: path.join(TEMP, "hundredfold-home-xyz") } }),
     reap: true,
     reason: "throwaway-home",
   },
   {
-    name: "a jinn-sandbox-* home outside the temp dir is reapable",
+    name: "a hundredfold-sandbox-* home outside the temp dir is reapable",
     candidate: gateway(9007),
-    context: context({ homeByPid: { 9007: path.join(os.homedir(), "jinn-sandbox-abc") } }),
+    context: context({ homeByPid: { 9007: path.join(os.homedir(), "hundredfold-sandbox-abc") } }),
     reap: true,
     reason: "throwaway-home",
   },
@@ -103,7 +103,7 @@ const CASES = [
   {
     name: "the same throwaway home younger than the age guard is spared",
     candidate: gateway(9006, 9),
-    context: context({ homeByPid: { 9006: path.join(TEMP, "jinn-home-xyz") } }),
+    context: context({ homeByPid: { 9006: path.join(TEMP, "hundredfold-home-xyz") } }),
     reap: false,
     reason: "too-young",
   },
@@ -132,7 +132,7 @@ test("parsePsDump keeps the whole command line as one field", () => {
 })
 
 /** A test worker's argv. Only the cwd paired with it decides whose worker it is. */
-const REMOVED_WORKTREE = path.join(WORKTREES_ROOT, "jinn-build-TEST-1")
+const REMOVED_WORKTREE = path.join(WORKTREES_ROOT, "hundredfold-build-TEST-1")
 const WORKER_IN_WORKTREE = `node ${path.join(REMOVED_WORKTREE, "node_modules", "vitest", "dist", "worker.js")}`
 
 test("planProcessReap sweeps a reaped gateway's children and orphaned test workers", () => {
@@ -169,7 +169,7 @@ test("planProcessReap sweeps a reaped gateway's children and orphaned test worke
  */
 function registryFixture(t, contents) {
   const root = fs.mkdtempSync(path.join(TEMP, "reap-registry-"))
-  const home = fs.mkdtempSync(path.join(TEMP, "jinn-sandbox-"))
+  const home = fs.mkdtempSync(path.join(TEMP, "hundredfold-sandbox-"))
   t.after(() => {
     fs.rmSync(root, { recursive: true, force: true })
     fs.rmSync(home, { recursive: true, force: true })
@@ -185,8 +185,8 @@ function contextFromRegistry(fixture, overrides = {}) {
   return buildContext({
     env: {
       ...process.env,
-      JINN_HOME: path.join(fixture.root, ".jinn"),
-      JINN_REAP_PROTECTED_PORTS: "",
+      HUNDREDFOLD_HOME: path.join(fixture.root, ".hundredfold"),
+      HUNDREDFOLD_REAP_PROTECTED_PORTS: "",
       ...overrides,
     },
     minAgeMinutes: 120,
@@ -197,7 +197,7 @@ function contextFromRegistry(fixture, overrides = {}) {
 
 test("a stale duplicate PID claim cannot replace the authoritative registered home", (t) => {
   const registered = fs.mkdtempSync(path.join(TEMP, "reap-registered-"))
-  const stale = fs.mkdtempSync(path.join(TEMP, "jinn-sandbox-stale-"))
+  const stale = fs.mkdtempSync(path.join(TEMP, "hundredfold-sandbox-stale-"))
   t.after(() => fs.rmSync(registered, { recursive: true, force: true }))
   t.after(() => fs.rmSync(stale, { recursive: true, force: true }))
   fs.writeFileSync(path.join(registered, "gateway.json"), JSON.stringify({ pid: 9201, ptyPids: [] }))
@@ -207,14 +207,14 @@ test("a stale duplicate PID claim cannot replace the authoritative registered ho
 
 test("a schema-v2 registry protects the instances it lists", (t) => {
   const fixture = registryFixture(t, (instance) => ({ schemaVersion: 2, instances: [instance] }))
-  const built = contextFromRegistry(fixture, { JINN_INSTANCES_REGISTRY: fixture.registry })
+  const built = contextFromRegistry(fixture, { HUNDREDFOLD_INSTANCES_REGISTRY: fixture.registry })
   assert.ok(built.registeredHomes.includes(fixture.home), "the registered home must be protected")
   assert.deepEqual(classifyGateway(gateway(9201), built), { reap: false, reason: "registered-instance" })
 })
 
 test("the pre-host-registry array inside the home is still honoured", (t) => {
   const fixture = registryFixture(t, (instance) => [instance])
-  const legacyHome = path.join(fixture.root, ".jinn")
+  const legacyHome = path.join(fixture.root, ".hundredfold")
   fs.mkdirSync(legacyHome, { recursive: true })
   fs.renameSync(fixture.registry, path.join(legacyHome, "instances.json"))
   const built = contextFromRegistry(fixture)
@@ -230,8 +230,8 @@ test("the pre-host-registry array inside the home is still honoured", (t) => {
  */
 test("a bare run signals nothing; --apply reaps what this run owns and nothing else", async (t) => {
   const root = fs.mkdtempSync(path.join(TEMP, "reap-cli-"))
-  const home = path.join(root, ".jinn")
-  const sandbox = fs.mkdtempSync(path.join(TEMP, "jinn-sandbox-"))
+  const home = path.join(root, ".hundredfold")
+  const sandbox = fs.mkdtempSync(path.join(TEMP, "hundredfold-sandbox-"))
   const victim = spawn(process.execPath, ["-e", "setInterval(() => {}, 60000)"], { stdio: "ignore" })
   const worker = spawn(process.execPath, ["-e", "setInterval(() => {}, 60000)"], { stdio: "ignore" })
   // Reparented to PID 1, named like a test worker, sitting under the worktrees
@@ -251,7 +251,7 @@ test("a bare run signals nothing; --apply reaps what this run owns and nothing e
   fs.writeFileSync(path.join(home, "gateway.json"), JSON.stringify({ pid: 1, ptyPids: [] }))
   fs.writeFileSync(path.join(sandbox, "gateway.json"), JSON.stringify({ pid: victim.pid, ptyPids: [] }))
   const psDump = path.join(root, "ps.txt")
-  const strayWorker = path.join(root, ".worktrees", "jinn-build-ACTIVE", "node_modules", "vitest", "dist", "worker.js")
+  const strayWorker = path.join(root, ".worktrees", "hundredfold-build-ACTIVE", "node_modules", "vitest", "dist", "worker.js")
   fs.writeFileSync(
     psDump,
     `${victim.pid} 1 05:00:00 90000 ${GATEWAY_ARGS}\n` +
@@ -261,9 +261,9 @@ test("a bare run signals nothing; --apply reaps what this run owns and nothing e
 
   const env = {
     ...process.env,
-    JINN_HOME: home,
-    JINN_REAP_PS_SOURCE: psDump,
-    JINN_REAP_PROTECTED_PORTS: "",
+    HUNDREDFOLD_HOME: home,
+    HUNDREDFOLD_REAP_PS_SOURCE: psDump,
+    HUNDREDFOLD_REAP_PROTECTED_PORTS: "",
   }
   const run = (...args) =>
     spawnSync(process.execPath, [REAP, "--repo", path.join(root, "repo"), ...args], {

@@ -47,7 +47,7 @@ describe("PairingScreen", () => {
     expect(screen.getByRole("button", { name: /pair with hundredfold cli/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /pair from web settings/i })).toBeTruthy()
     expect(screen.getByText(/run this on the computer where hundredfold is running/i)).toBeTruthy()
-    expect(screen.getByText(/jinn pair/i)).toBeTruthy()
+    expect(screen.getByText(/hundredfold pair/i)).toBeTruthy()
 
     fireEvent.click(screen.getByRole("button", { name: /pair from web settings/i }))
 
@@ -59,25 +59,25 @@ describe("PairingScreen", () => {
   it("shows the instance-scoped pair command for a non-default instance", () => {
     render(
       <PairingScreen
-        authState={{ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: true, instance: "jinn-yorio" }}
+        authState={{ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: true, instance: "hundredfold-yorio" }}
         pairing={false}
         onPair={() => {}}
       />,
     )
 
-    expect(screen.getByText("jinn -i jinn-yorio pair")).toBeTruthy()
+    expect(screen.getByText("hundredfold -i hundredfold-yorio pair")).toBeTruthy()
   })
 
   it("shows the bare pair command for the default instance", () => {
     render(
       <PairingScreen
-        authState={{ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: true, instance: "jinn" }}
+        authState={{ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: true, instance: "hundredfold" }}
         pairing={false}
         onPair={() => {}}
       />,
     )
 
-    expect(screen.getByText("jinn pair")).toBeTruthy()
+    expect(screen.getByText("hundredfold pair")).toBeTruthy()
   })
 
   it("toggles the open pairing flow closed when its header is clicked again", () => {

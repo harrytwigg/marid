@@ -95,9 +95,9 @@ The deferred stagger choreography lands now, scoped to the talk page:
 
 ### 6. Nested delegation enablement (R4)
 
-- **Persona template** (`packages/jinn/template/talk/orchestrator-persona.md`): add a short "nested delegation" note — for multi-part work, instruct the lead to split the work among its own sub-sessions (the Child Session Protocol in the gateway CLAUDE.md already teaches spawned employees how); mention sub-threads are visible to the operator live. **[JUDGMENT** — encourage, don't force; the orchestrator decides when nesting helps.**]**
+- **Persona template** (`packages/hundredfold/template/talk/orchestrator-persona.md`): add a short "nested delegation" note — for multi-part work, instruct the lead to split the work among its own sub-sessions (the Child Session Protocol in the gateway CLAUDE.md already teaches spawned employees how); mention sub-threads are visible to the operator live. **[JUDGMENT** — encourage, don't force; the orchestrator decides when nesting helps.**]**
 - **No delegate-endpoint changes:** the orchestrator continues to manage only its direct children (roster/continue); grandchildren are *visible* (graph) and *accessible* (drawer, attach) — that matches the org model (managers manage their reports). Documented as an explicit non-goal this round.
-- **E2E:** the isolated JINN_HOME gets a CLAUDE.md teaching the spawn protocol + 2 employee personas; the scenario asks AURA for a task that names two specialists under a lead; PASS = a depth-2 node appears in the ThreadCard sub-rows + work tree, and the drawer descends to it with breadcrumbs.
+- **E2E:** the isolated HUNDREDFOLD_HOME gets a CLAUDE.md teaching the spawn protocol + 2 employee personas; the scenario asks AURA for a task that names two specialists under a lead; PASS = a depth-2 node appears in the ThreadCard sub-rows + work tree, and the drawer descends to it with breadcrumbs.
 
 ### 7. What does NOT change
 

@@ -58,7 +58,7 @@ function renderSidebar(variant: "desktop" | "mobile" = "desktop") {
 beforeEach(() => localStorage.clear())
 
 describe.each(["focused", "all", "tree"])("the desktop sidebar in %s mode", (mode) => {
-  beforeEach(() => localStorage.setItem("jinn-sidebar-focus-mode", mode))
+  beforeEach(() => localStorage.setItem("hundredfold-sidebar-focus-mode", mode))
 
   it("badges a session bound to a department", () => {
     sidebarData.sessions = [session({ scopeDepartment: "side-project" })]

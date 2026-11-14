@@ -2,7 +2,7 @@
 //
 //   node menus.mjs <sandbox-home> <base-url> <out-dir>
 //
-// Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
+// Runs in the browser HUNDREDFOLD_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
 // fails. Checks: focus returns to the trigger; typeahead; arrow keys; nested submenus by keyboard and by
 // pointer; Escape; an outside press reaching what it landed on; the context menu by right-click and by
 // Shift+F10; a tap at phone width; and the engine and model menu's search. Photographs the open states
@@ -19,7 +19,7 @@ if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: menus.mjs <sand
 const headers = authHeaders(sandboxHome)
 const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), 'utf8'))
 fs.mkdirSync(outDir, { recursive: true })
-const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
+const browser = await (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 
 const kit = createKit({ browser, headers, baseUrl })
 const { results, check, assert, open, focusedLabel, gone } = kit
@@ -169,7 +169,7 @@ await runCold({ browser, headers, baseUrl, fixtures }, kit)
 }
 
 // ---- Touch: a held finger opens the row's context menu and lifting it leaves the menu open (Chromium only: CDP touch) ----
-if (process.env.JINN_CAPTURE_BROWSER === 'chromium') {
+if (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium') {
   const { page, context, errors } = await open({ width: 1440, height: 900 }, `/?session=${fixtures.chatSession}`, { touch: true })
   await check('long press: the menu opens under a held finger, stays open when it lifts, and the lift does not reach the row', async () => {
     const box = await page.getByText('Delegation flow', { exact: true }).first().boundingBox()

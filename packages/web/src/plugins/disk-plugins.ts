@@ -1,5 +1,5 @@
 /**
- * The disk door: what turns `~/.jinn/plugins/<id>/` into loaded plugins.
+ * The disk door: what turns `~/.hundredfold/plugins/<id>/` into loaded plugins.
  *
  * The gateway does the discovery — it lists every directory it found and serves
  * the client half of the ones the operator enabled — so this side is a

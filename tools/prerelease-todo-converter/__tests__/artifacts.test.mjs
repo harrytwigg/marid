@@ -11,7 +11,7 @@ import {
 } from "../artifacts.mjs";
 
 function rootFixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifacts-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifacts-"));
   fs.mkdirSync(path.join(root, "runs", "wf"), { recursive: true });
   fs.mkdirSync(path.join(root, "poll"), { recursive: true });
   return root;
@@ -49,7 +49,7 @@ test("opens the closed artifact allowlist without following paths and returns de
 
 test("refuses symlinks, unexpected files, nonterminal Workflow references, and executable poll references", () => {
   const root = rootFixture();
-  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifacts-outside-"));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifacts-outside-"));
   try {
     fs.writeFileSync(path.join(root, "runs", "wf", "running.json"), JSON.stringify({
       schemaVersion: 3,
@@ -85,9 +85,9 @@ test("refuses symlinks, unexpected files, nonterminal Workflow references, and e
 });
 
 test("verifies byte-exact external artifact backups and rehearses a descriptor-safe restore", () => {
-  const source = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifact-source-"));
-  const backup = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifact-backup-"));
-  const restore = path.join(os.tmpdir(), `jinn-prerelease-artifact-restore-${process.pid}-${Date.now()}`);
+  const source = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifact-source-"));
+  const backup = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifact-backup-"));
+  const restore = path.join(os.tmpdir(), `hundredfold-prerelease-artifact-restore-${process.pid}-${Date.now()}`);
   try {
     fs.mkdirSync(path.join(source, "runs", "wf"), { recursive: true });
     fs.mkdirSync(path.join(backup, "runs", "wf"), { recursive: true });
@@ -112,9 +112,9 @@ test("verifies byte-exact external artifact backups and rehearses a descriptor-s
 });
 
 test("refuses artifact backup mismatches and occupied restore targets", () => {
-  const source = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifact-source-"));
-  const backup = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifact-backup-"));
-  const restore = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-artifact-restore-"));
+  const source = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifact-source-"));
+  const backup = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifact-backup-"));
+  const restore = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-artifact-restore-"));
   try {
     fs.mkdirSync(path.join(source, "runs", "wf"), { recursive: true });
     fs.mkdirSync(path.join(backup, "runs", "wf"), { recursive: true });

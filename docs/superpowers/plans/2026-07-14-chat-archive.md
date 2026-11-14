@@ -21,9 +21,9 @@
 ### Task 1: Persist and query the archive state
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Test: `packages/jinn/src/sessions/__tests__/registry-pagination.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/registry-pagination.test.ts`
 
 **Interfaces:**
 - Produces: `Session.archivedAt?: string | null` and `archiveSession(id): Session | undefined` / `unarchiveSession(id): Session | undefined`.
@@ -46,7 +46,7 @@ it('restores an archived chat to normal lists', () => {
 
 - [ ] **Step 2: Run the registry test to verify it fails**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/registry-pagination.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/registry-pagination.test.ts`
 
 Expected: FAIL because archive lifecycle methods and archive-aware list filtering do not exist.
 
@@ -74,15 +74,15 @@ Add nullable `archived_at` to `CREATE_TABLE` and `migrateSessionsSchema`, projec
 
 - [ ] **Step 4: Run the registry test to verify it passes**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/registry-pagination.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/registry-pagination.test.ts`
 
 Expected: PASS.
 
 ### Task 2: Add reversible gateway routes
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
 
 **Interfaces:**
 - Consumes: `archiveSession(id)` and `unarchiveSession(id)` from the registry.
@@ -109,7 +109,7 @@ it('unarchives a retained session', async () => {
 
 - [ ] **Step 2: Run the route test to verify it fails**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
 
 Expected: FAIL with 404 because the archive routes do not exist.
 
@@ -129,7 +129,7 @@ Place matching archive/unarchive routes adjacent to session mutation routes. Pre
 
 - [ ] **Step 4: Run the route test to verify it passes**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
 
 Expected: PASS.
 
@@ -160,7 +160,7 @@ it('treats a restored chat as active', () => {
 
 - [ ] **Step 2: Run the web test to verify it fails**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
 
 Expected: FAIL because the archive helper and UI state do not exist.
 
@@ -175,7 +175,7 @@ Add archive/unarchive mutations that remove an archived chat from the normal cac
 
 - [ ] **Step 4: Run the web test to verify it passes**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
 
 Expected: PASS.
 
@@ -184,10 +184,10 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter jinn-cli typecheck
-pnpm --filter @jinn/web typecheck
-pnpm --filter jinn-cli test
-pnpm --filter @jinn/web test
+pnpm --filter hundredfold typecheck
+pnpm --filter @hundredfold/web typecheck
+pnpm --filter hundredfold test
+pnpm --filter @hundredfold/web test
 ```
 
 Expected: all commands pass.

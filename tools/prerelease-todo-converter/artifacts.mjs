@@ -29,7 +29,7 @@ function stableJson(value) {
 const HELPER_COMPILERS = ["cc", "gcc", "clang"];
 
 function helperSession() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-openat-helper-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-openat-helper-"));
   const binary = path.join(root, "openat-helper");
   const candidates = process.env.CC ? [process.env.CC] : HELPER_COMPILERS;
   const attempts = [];

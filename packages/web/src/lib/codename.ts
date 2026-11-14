@@ -1,8 +1,9 @@
-import { CODENAME } from "@jinn/codename"
+import { CODENAME } from "@hundredfold/codename"
+import { LEGACY_CODENAME } from "@hundredfold/legacy-names"
 
 /**
  * The codename, as the browser sees it: the same word the gateway builds its names from
- * (`@jinn/codename` is the gateway's own one-line constant). A browser holds state under the
+ * (`@hundredfold/codename` is the gateway's own one-line constant). A browser holds state under the
  * codename it was last used with, and the gateway it talks to may be an older build, so every
  * name here has a legacy spelling to read as well as the current one to write.
  */
@@ -10,14 +11,14 @@ import { CODENAME } from "@jinn/codename"
 export { CODENAME }
 
 /** The name every browser that used an earlier build holds its state under. Never changes. */
-export const LEGACY_CODENAME = "jinn"
+export { LEGACY_CODENAME }
 
 /** Whether this build's name differs from the legacy one, so legacy spellings exist. */
 export function isRenamed(codename: string = CODENAME): boolean {
   return codename !== LEGACY_CODENAME
 }
 
-/** `X-Jinn-Config-Revision` for the suffix `config-revision`: a request header this build sends. */
+/** `X-Hundredfold-Config-Revision` for the suffix `config-revision`: a request header this build sends. */
 export function requestHeaderName(suffix: string, codename: string = CODENAME): string {
   return ["X", codename.charAt(0).toUpperCase() + codename.slice(1), ...suffix.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1))].join("-")
 }
@@ -38,16 +39,19 @@ export function readResponseHeader(headers: Pick<Headers, "get">, suffix: string
   return null
 }
 
-/** The URL-fragment keys the CLI launches the browser with (`jinn-bootstrap`, `jinn-pair`), current first. */
+/** The URL-fragment keys the CLI launches the browser with (`hundredfold-bootstrap`, `hundredfold-pair`), current first. */
 export function hashKeyNames(suffix: string, codename: string = CODENAME): string[] {
   const current = `${codename}-${suffix}`
   const legacy = `${LEGACY_CODENAME}-${suffix}`
   return current === legacy ? [current] : [current, legacy]
 }
 
+/** The npm scope the public plugin SDK is published under. It is the organisation's, not the codename's. */
+export const PLUGIN_SDK_SCOPE = "hundredfold"
+
 /** The specifiers a plugin may import the SDK by: the current package name and the legacy one third parties wrote. */
-export function pluginSdkSpecifiers(codename: string = CODENAME): string[] {
-  const current = `@${codename}/plugin-sdk`
+export function pluginSdkSpecifiers(scope: string = PLUGIN_SDK_SCOPE): string[] {
+  const current = `@${scope}/plugin-sdk`
   const legacy = `@${LEGACY_CODENAME}/plugin-sdk`
   return current === legacy ? [current] : [current, legacy]
 }

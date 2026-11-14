@@ -6,7 +6,7 @@ import { test } from "node:test"
 
 import { assertDisposableHome, prepareSandbox, reachableAddresses } from "../device-scroll-fixture.mjs"
 
-const disposable = path.join(os.tmpdir(), ".jinn-qa-flick")
+const disposable = path.join(os.tmpdir(), ".hundredfold-qa-flick")
 
 const CONFIG = "gateway:\n  port: 7782\n"
 
@@ -22,7 +22,7 @@ const abiFailures = [
 
 /** @param {import("node:test").TestContext} t */
 function sandboxHome(t) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-qa-flick-"))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-qa-flick-"))
   t.after(() => fs.rmSync(home, { recursive: true, force: true }))
   fs.writeFileSync(path.join(home, "config.yaml"), CONFIG)
   return home
@@ -39,7 +39,7 @@ function captureThrow(run) {
 }
 
 test("refuses the production instance home whatever port it carries", () => {
-  const home = path.join(os.homedir(), ".jinn")
+  const home = path.join(os.homedir(), ".hundredfold")
   assert.throws(() => assertDisposableHome(home, { gateway: { port: 7999 } }), /production instance home/)
 })
 

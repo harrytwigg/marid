@@ -5,7 +5,7 @@ import { isDirectSession, isVisibleSource, pickDeleteFallbackId, pickNeighborSes
 describe('chat sidebar grouping helpers', () => {
   it('treats only employee-less, non-cron sessions as direct', () => {
     expect(isDirectSession({ source: 'web', sourceRef: 'web:1' })).toBe(true)
-    expect(isDirectSession({ source: 'web', sourceRef: 'web:2', employee: 'jinn' })).toBe(false)
+    expect(isDirectSession({ source: 'web', sourceRef: 'web:2', employee: 'hundredfold' })).toBe(false)
     expect(isDirectSession({ source: 'cron', sourceRef: 'cron:daily' })).toBe(false)
     expect(isDirectSession({ source: 'web', sourceRef: 'cron:daily' })).toBe(false)
   })
@@ -17,7 +17,7 @@ describe('chat sidebar grouping helpers', () => {
     expect(isDirectSession({ source: 'web', sourceRef: 'web:3', employee: 'jimbo' }, 'jimbo')).toBe(true)
     expect(isDirectSession({ source: 'web', sourceRef: 'web:4', employee: 'Jimbo' }, 'jimbo')).toBe(true)
     // a real org employee is never folded into direct
-    expect(isDirectSession({ source: 'web', sourceRef: 'web:5', employee: 'jinn' }, 'jimbo')).toBe(false)
+    expect(isDirectSession({ source: 'web', sourceRef: 'web:5', employee: 'hundredfold' }, 'jimbo')).toBe(false)
     // a portal-slug row is still a separate group when no slug is supplied
     expect(isDirectSession({ source: 'web', sourceRef: 'web:6', employee: 'jimbo' })).toBe(false)
   })
@@ -85,9 +85,9 @@ describe('chat sidebar search row identity', () => {
     portalName: 'Jimbo',
     employeeData: new Map([
       [
-        'jinn',
+        'hundredfold',
         {
-          name: 'jinn',
+          name: 'hundredfold',
           displayName: 'Hundredfold Dev',
           department: 'platform',
           rank: 'employee' as const,
@@ -125,8 +125,8 @@ describe('chat sidebar search row identity', () => {
 
   it('resolves a real employee to its org display name', () => {
     expect(
-      resolveRowIdentity({ source: 'web', sourceRef: 'web:2', employee: 'jinn' }, opts),
-    ).toEqual({ avatarName: 'jinn', displayName: 'Hundredfold Dev' })
+      resolveRowIdentity({ source: 'web', sourceRef: 'web:2', employee: 'hundredfold' }, opts),
+    ).toEqual({ avatarName: 'hundredfold', displayName: 'Hundredfold Dev' })
   })
 
   it('title-cases an employee with no org profile rather than crashing', () => {

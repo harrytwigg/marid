@@ -4,7 +4,7 @@
 
 **Goal:** Make setup and migrations share deterministic placeholder materialization, then ensure detached restarts retain the gateway's effective runtime port.
 
-**Architecture:** A pure shared module derives `portalName` and `portalSlug` from instance config and materializes only `.md`, `.yaml`, and `.yml` payloads. Pending migration discovery hashes those inputs into its key and describes materialized payload paths under the migration snapshot; snapshot creation writes and audits those read-only payloads atomically before the COO session is created. Detached restart argv carries the effective port into `restart-entry`, while lifecycle signaling retains the resolved-`JINN_HOME` ownership proof.
+**Architecture:** A pure shared module derives `portalName` and `portalSlug` from instance config and materializes only `.md`, `.yaml`, and `.yml` payloads. Pending migration discovery hashes those inputs into its key and describes materialized payload paths under the migration snapshot; snapshot creation writes and audits those read-only payloads atomically before the COO session is created. Detached restart argv carries the effective port into `restart-entry`, while lifecycle signaling retains the resolved-`HUNDREDFOLD_HOME` ownership proof.
 
 **Tech Stack:** TypeScript, Node filesystem/crypto APIs, js-yaml, Vitest, Node native test runner, disposable upgrade harness.
 
@@ -22,30 +22,30 @@
 ### Task 1: Shared Pure Template Materialization
 
 **Files:**
-- Create: `packages/jinn/src/shared/template-materialization.ts`
-- Create: `packages/jinn/src/shared/__tests__/template-materialization.test.ts`
-- Modify: `packages/jinn/src/cli/setup.ts`
+- Create: `packages/hundredfold/src/shared/template-materialization.ts`
+- Create: `packages/hundredfold/src/shared/__tests__/template-materialization.test.ts`
+- Modify: `packages/hundredfold/src/cli/setup.ts`
 
 **Interfaces:**
 - Produces: `deriveTemplateMaterialization(config)`, `materializeTemplateText(filePath, content, inputs)`, and `findUnresolvedTemplatePlaceholders(content)`.
-- Consumes: `{ portal?: { portalName?: string } }`; defaults the name to `Jinn` and derives the slug with setup's existing lowercase/whitespace-to-hyphen rule.
+- Consumes: `{ portal?: { portalName?: string } }`; defaults the name to `Hundredfold` and derives the slug with setup's existing lowercase/whitespace-to-hyphen rule.
 
-- [ ] Write failing tests for default Jinn, mixed-case names with spaces, unknown placeholders, and non-Markdown/YAML files.
-- [ ] Run `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-materialization.test.ts` and verify RED because the module does not exist.
+- [ ] Write failing tests for default Hundredfold, mixed-case names with spaces, unknown placeholders, and non-Markdown/YAML files.
+- [ ] Run `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-materialization.test.ts` and verify RED because the module does not exist.
 - [ ] Implement the three pure functions and replace setup's local replacement function and slug derivation with them.
 - [ ] Re-run the focused test and verify GREEN.
 
 ### Task 2: Audited Materialized Migration Payloads
 
 **Files:**
-- Modify: `packages/jinn/src/migrations/service.ts`
-- Modify: `packages/jinn/src/migrations/snapshot.ts`
-- Modify: `packages/jinn/src/migrations/__tests__/service.test.ts`
-- Modify: `packages/jinn/src/migrations/__tests__/snapshot.test.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/instance-migration-api.test.ts`
-- Modify: `packages/jinn/template/skills/migrate/SKILL.md`
-- Regenerate: `packages/jinn/template/migrations/0.26.0/**`
+- Modify: `packages/hundredfold/src/migrations/service.ts`
+- Modify: `packages/hundredfold/src/migrations/snapshot.ts`
+- Modify: `packages/hundredfold/src/migrations/__tests__/service.test.ts`
+- Modify: `packages/hundredfold/src/migrations/__tests__/snapshot.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/instance-migration-api.test.ts`
+- Modify: `packages/hundredfold/template/skills/migrate/SKILL.md`
+- Regenerate: `packages/hundredfold/template/migrations/0.26.0/**`
 
 **Interfaces:**
 - Produces: `MigrationMaterializationPlan` containing the exact portal inputs, their SHA-256, manifest hashes, source payload paths, and planned snapshot-relative materialized paths.
@@ -77,12 +77,12 @@
 ### Task 4: Effective-Port Detached Restart
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/restart-entry-options.ts`
-- Modify: `packages/jinn/src/gateway/restart-entry.ts`
-- Modify: `packages/jinn/src/gateway/lifecycle.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/cli/start.ts`
-- Modify: `packages/jinn/src/cli/restart.ts`
+- Modify: `packages/hundredfold/src/gateway/restart-entry-options.ts`
+- Modify: `packages/hundredfold/src/gateway/restart-entry.ts`
+- Modify: `packages/hundredfold/src/gateway/lifecycle.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/cli/start.ts`
+- Modify: `packages/hundredfold/src/cli/restart.ts`
 - Modify: focused restart/lifecycle/API tests.
 
 **Interfaces:**

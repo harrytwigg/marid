@@ -6,7 +6,7 @@
 
 ## Context
 
-A native application can connect to several Jinn gateways. One global cookie,
+A native application can connect to several Hundredfold gateways. One global cookie,
 query cache, WebSocket, or instance identity allows data from gateway A to
 appear after switching to gateway B. Host-only credential keys also collide
 when two gateways use different ports.

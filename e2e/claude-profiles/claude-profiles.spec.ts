@@ -9,9 +9,9 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
  * exist. Every element in light and dark, at desktop and phone widths.
  */
 
-const home = process.env.JINN_VERIFY_HOME
-const artifacts = process.env.JINN_VERIFY_ARTIFACTS
-if (!home || !artifacts) throw new Error('JINN_VERIFY_HOME and JINN_VERIFY_ARTIFACTS are required')
+const home = process.env.HUNDREDFOLD_VERIFY_HOME
+const artifacts = process.env.HUNDREDFOLD_VERIFY_ARTIFACTS
+if (!home || !artifacts) throw new Error('HUNDREDFOLD_VERIFY_HOME and HUNDREDFOLD_VERIFY_ARTIFACTS are required')
 const token = (JSON.parse(fs.readFileSync(path.join(home, 'gateway.json'), 'utf8')) as { token: string }).token
 const seed = JSON.parse(fs.readFileSync(path.join(home, 'claude-profiles-seed.json'), 'utf8')) as {
   ids: Record<'side-dev' | 'side-missing', string>
@@ -29,8 +29,8 @@ async function open(browser: Browser, theme: (typeof THEMES)[number], viewport: 
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
   await context.addInitScript((t: string) => {
-    localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
+    localStorage.setItem('hundredfold-theme', t)
+    localStorage.setItem('hundredfold-onboarded', 'true')
   }, theme)
   const page = await context.newPage()
   await page.goto(url, { waitUntil: 'networkidle' })

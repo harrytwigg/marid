@@ -1,6 +1,6 @@
 # Contract: `GET /api/work-items/:id/sessions?tree=1`
 
-**Status**: extension of an existing route (`packages/jinn/src/gateway/api.ts:2828`). The route,
+**Status**: extension of an existing route (`packages/hundredfold/src/gateway/api.ts:2828`). The route,
 its id validation (`requireTodoRouteId`), and its auth are unchanged.
 
 ## Backward compatibility (binding)

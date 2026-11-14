@@ -103,7 +103,7 @@ function ScopedSections({ department }: { department: DepartmentDefinitionWire }
         <SkillProblems problems={department.skillProblems ?? []} />
       </Section>
       <Section title="MCP servers" testId="department-mcp">
-        <Chips items={department.mcp} empty="None. Scoped sessions get only the jinn server." />
+        <Chips items={department.mcp} empty="None. Scoped sessions get only the hundredfold server." />
         <McpProblems problems={department.mcpProblems ?? []} />
       </Section>
       <Section title="Shared Notes" testId="department-shared-notes">

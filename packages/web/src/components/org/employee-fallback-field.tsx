@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import type { FallbackChainSubject, FallbackLink } from "@jinn/fallback-chain-wire"
+import type { FallbackChainSubject, FallbackLink } from "@hundredfold/fallback-chain-wire"
 import { ChainFlowDisclosure } from "@/components/fallback/chain-flow-disclosure"
 import { resolveForFlow } from "@/components/fallback/resolve-links"
 import { useModelRegistry } from "@/hooks/use-model-registry"

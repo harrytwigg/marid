@@ -503,7 +503,7 @@ describe('ModelSelectorRow opencode catalog (search + provider labels)', () => {
     // a persisted expand would have shown.
     fireEvent.change(screen.getByLabelText('Search models'), { target: { value: '' } })
     expect(screen.getAllByRole('menuitemradio')).toHaveLength(5)
-    const stored = localStorage.getItem('jinn-model-picker-expanded')
+    const stored = localStorage.getItem('hundredfold-model-picker-expanded')
     expect(stored === null || !JSON.parse(stored).opencode).toBe(true)
   })
 })

@@ -27,7 +27,7 @@ import { writeFailed } from "./write-lane"
  */
 
 export const ESCAPE_HATCH_TOOL: TalkTool = {
-  name: "jinn_action",
+  name: "hundredfold_action",
   description:
     "Describe an action that no other tool covers. It asks the operator before doing anything, and can only record the request against a Todo.",
   parameters: params(
@@ -45,12 +45,12 @@ export const ESCAPE_HATCH_TOOL: TalkTool = {
     if (!isTodoId(subject)) {
       return Promise.resolve({
         ok: false,
-        error: `"jinn_action" has no tool for ${JSON.stringify(intent)} and nowhere to record it — it can only write against a Todo, and "subject" was not one. Tell the operator what is missing, and use a navigation tool to take them where they can do it themselves.`,
+        error: `"hundredfold_action" has no tool for ${JSON.stringify(intent)} and nowhere to record it — it can only write against a Todo, and "subject" was not one. Tell the operator what is missing, and use a navigation tool to take them where they can do it themselves.`,
       })
     }
     const note = detail ? `${intent}\n\n${detail}` : intent
     return withConsent(
-      { tool: "jinn_action", title: `Record this on ${subject}?`, hint: note, confirm: "Record it", subject },
+      { tool: "hundredfold_action", title: `Record this on ${subject}?`, hint: note, confirm: "Record it", subject },
       async () => {
         try {
           await api.addWorkItemComment(subject, note, undefined, "talk")

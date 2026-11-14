@@ -1,6 +1,6 @@
 # Hermes Engine
 
-Hermes is [NousResearch's open-source `hermes` CLI](https://hermes-agent.nousresearch.com/) — a model-agnostic, self-improving agent that manages its own tool loop, memory, and skills. Jinn wires Hermes in as a first-class engine: two complementary modes handle streaming chat work and terminal-view sessions.
+Hermes is [NousResearch's open-source `hermes` CLI](https://hermes-agent.nousresearch.com/) — a model-agnostic, self-improving agent that manages its own tool loop, memory, and skills. Hundredfold wires Hermes in as a first-class engine: two complementary modes handle streaming chat work and terminal-view sessions.
 
 > **Metered cost.** Unlike the subscription-wrapped engines (claude, codex, grok), Hermes owns its own model loop and bills **per token** on the provider you configure in `~/.hermes`. Make sure you understand your provider's pricing before running Hermes on high-volume tasks.
 
@@ -12,7 +12,7 @@ Hermes is [NousResearch's open-source `hermes` CLI](https://hermes-agent.nousres
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-Credentials and provider configuration live in `~/.hermes` (`.env` and/or `auth.json`). Jinn only resolves the binary from `PATH`; all model-provider wiring is the CLI's own concern.
+Credentials and provider configuration live in `~/.hermes` (`.env` and/or `auth.json`). Hundredfold only resolves the binary from `PATH`; all model-provider wiring is the CLI's own concern.
 
 ---
 
@@ -20,7 +20,7 @@ Credentials and provider configuration live in `~/.hermes` (`.env` and/or `auth.
 
 ### Chat Mode — `HermesAcpEngine`
 
-The primary work engine. Jinn spawns `hermes acp` once per session and communicates with it over **ndjson JSON-RPC 2.0** (the Agent Client Protocol, ACP). The process is kept warm across turns so context and Hermes's own memory survive between messages.
+The primary work engine. Hundredfold spawns `hermes acp` once per session and communicates with it over **ndjson JSON-RPC 2.0** (the Agent Client Protocol, ACP). The process is kept warm across turns so context and Hermes's own memory survive between messages.
 
 - Real token streaming via `session/update` notifications
 - Auto-approves all permission requests (see [Auto-approve](#auto-approve))
@@ -36,7 +36,7 @@ Opens `hermes chat --cli --yolo --accept-hooks` inside a `node-pty` pseudo-termi
 
 ## ACP Invocation Contract
 
-Jinn drives the ACP over a pair of stdio pipes using JSON-RPC 2.0. Each message is a single line terminated by `\n`.
+Hundredfold drives the ACP over a pair of stdio pipes using JSON-RPC 2.0. Each message is a single line terminated by `\n`.
 
 ### Methods used
 
@@ -44,16 +44,16 @@ Jinn drives the ACP over a pair of stdio pipes using JSON-RPC 2.0. Each message 
 |--------|-----------|---------|
 | `initialize` | request | Handshake — declares protocol version and client capabilities. Called once when the process starts. |
 | `session/new` | request | Create a new Hermes session. Response carries `sessionId` and the live model registry (`models.availableModels`, `models.currentModelId`). |
-| `session/load` | request | Resume an existing Hermes session by `sessionId`. Used when the Jinn session has a `resumeSessionId`. |
+| `session/load` | request | Resume an existing Hermes session by `sessionId`. Used when the Hundredfold session has a `resumeSessionId`. |
 | `session/set_mode` | request | Called immediately after session creation with `modeId: "dont_ask"` to suppress all interactive prompts. |
 | `session/set_model` | request | Switch the active model for a running session. Called before each turn when the requested model differs from the current one. |
 | `session/prompt` | request | Send a user message and start a turn. Resolves when Hermes returns a response object containing `stopReason`. |
 
-Hermes also sends **server requests** (`session/request_permission`). Jinn answers every one with `{ outcome: { outcome: "selected", optionId: "allow_always" } }` — see [Auto-approve](#auto-approve).
+Hermes also sends **server requests** (`session/request_permission`). Hundredfold answers every one with `{ outcome: { outcome: "selected", optionId: "allow_always" } }` — see [Auto-approve](#auto-approve).
 
 ### `session/update` → StreamDelta mapping
 
-During a turn Hermes emits `session/update` notifications. Jinn maps their `sessionUpdate` field to `StreamDelta` entries:
+During a turn Hermes emits `session/update` notifications. Hundredfold maps their `sessionUpdate` field to `StreamDelta` entries:
 
 | `sessionUpdate` value | Mapped to | Notes |
 |-----------------------|-----------|-------|
@@ -68,21 +68,21 @@ During a turn Hermes emits `session/update` notifications. Jinn maps their `sess
 
 ## Live Model Discovery
 
-When Jinn starts a new Hermes session it reads the model list **directly from the `session/new` response** — no static config file, no version pinning.
+When Hundredfold starts a new Hermes session it reads the model list **directly from the `session/new` response** — no static config file, no version pinning.
 
 The discovery flow:
 
 1. `initialize` → handshake (protocol version 1).
 2. `session/new` → response includes `models.availableModels[]` (each entry has `modelId` and `name`) and `models.currentModelId`.
-3. Jinn populates the model registry from this list. Model IDs follow the `provider:model` convention, e.g. `openai-codex:gpt-5.5`.
+3. Hundredfold populates the model registry from this list. Model IDs follow the `provider:model` convention, e.g. `openai-codex:gpt-5.5`.
 
-**Precedence.** The three sources are tried in order: live-discovered models (highest priority) → the optional `models.hermes` block in `~/.jinn/config.yaml` (only consulted when discovery returns nothing) → the built-in static catalog (`openai-codex:gpt-5.5` and `openai-codex:gpt-5.4`) as the last resort. A configured `models.hermes` block does **not** override live discovery; it is only a fallback when the binary is unreachable or returns no models.
+**Precedence.** The three sources are tried in order: live-discovered models (highest priority) → the optional `models.hermes` block in `~/.hundredfold/config.yaml` (only consulted when discovery returns nothing) → the built-in static catalog (`openai-codex:gpt-5.5` and `openai-codex:gpt-5.4`) as the last resort. A configured `models.hermes` block does **not** override live discovery; it is only a fallback when the binary is unreachable or returns no models.
 
 ---
 
 ## Effort — None
 
-Hermes has no reasoning-effort concept. `effortMechanism` is `"none"` and `effortLevels` is `[]`. The effort control is hidden in the Jinn UI whenever a Hermes session is active. Passing an `effortLevel` to a Hermes session has no effect.
+Hermes has no reasoning-effort concept. `effortMechanism` is `"none"` and `effortLevels` is `[]`. The effort control is hidden in the Hundredfold UI whenever a Hermes session is active. Passing an `effortLevel` to a Hermes session has no effect.
 
 ---
 
@@ -94,13 +94,13 @@ Every Hermes process (both modes) runs fully autonomously. Three layers enforce 
 |-------|-----------|
 | Environment | `HERMES_YOLO_MODE=1` and `HERMES_ACCEPT_HOOKS=1` are injected into the process environment at spawn time. |
 | ACP mode | `session/set_mode` is called with `modeId: "dont_ask"` immediately after each new session is created. |
-| Permission handler | Jinn registers an RPC server-request handler that answers every `session/request_permission` call with `{ outcome: { outcome: "selected", optionId: "allow_always" } }`. |
+| Permission handler | Hundredfold registers an RPC server-request handler that answers every `session/request_permission` call with `{ outcome: { outcome: "selected", optionId: "allow_always" } }`. |
 
 ---
 
 ## Configuration
 
-Both `bin` and `model` are optional — Jinn synthesizes sensible defaults when they are absent.
+Both `bin` and `model` are optional — Hundredfold synthesizes sensible defaults when they are absent.
 
 ```yaml
 engines:
@@ -109,7 +109,7 @@ engines:
     model: openai-codex:gpt-5.5  # default model; overridden by live discovery
 ```
 
-`bin` accepts any resolvable path or binary name. If omitted, Jinn searches `PATH` plus common install directories. If the binary is not found, the `hermes` engine is marked unavailable and hidden from the UI.
+`bin` accepts any resolvable path or binary name. If omitted, Hundredfold searches `PATH` plus common install directories. If the binary is not found, the `hermes` engine is marked unavailable and hidden from the UI.
 
 `model` sets the initial default. After the first `session/new` succeeds, the live `currentModelId` from the handshake takes precedence for that session.
 
@@ -122,7 +122,7 @@ The `hermes` binary is not on `PATH`. Run `which hermes` to confirm. Install wit
 ```bash
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
-Then restart the Jinn gateway.
+Then restart the Hundredfold gateway.
 
 **Turns fail immediately at session start**
 Provider credentials or model configuration are missing in `~/.hermes`. Check `.env` and `auth.json` in that directory and verify your provider endpoint and API key are set. Hermes's own docs cover provider setup.

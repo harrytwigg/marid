@@ -1,6 +1,6 @@
 # Line endings are load-bearing in this repository.
 #
-# Shipped migration payloads under packages/jinn/template/migrations are
+# Shipped migration payloads under packages/hundredfold/template/migrations are
 # content-addressed: each manifest stores a sha256 of the payload bytes, and the
 # migration snapshot compares payloads byte-for-byte against the user's instance
 # files. A contributor with core.autocrlf=true (the Git for Windows default) got

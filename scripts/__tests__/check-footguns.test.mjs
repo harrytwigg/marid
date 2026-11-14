@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
+import { OLD } from "../legacy-names.mjs";
 
 // Spawned with a temp repository as its cwd, so the path has to be absolute.
 const CHECKER = fileURLToPath(new URL("../check-footguns.mjs", import.meta.url))
@@ -68,20 +69,20 @@ const RULE_CASES = [
   {
     rule: "personal-path",
     triggers: {
-      "packages/jinn/src/thing.ts": 'export const cache = "/Users/someone/.cache/jinn";\n',
+      "packages/hundredfold/src/thing.ts": `export const cache = "/Users/someone/.cache/${OLD.codename}";\n`,
     },
     passes: {
-      "packages/jinn/template/migrations/0001-initial/notes.md": "Wrote /Users/someone/.jinn/config.yaml\n",
+      "packages/hundredfold/template/migrations/0001-initial/notes.md": `Wrote /Users/someone/.${OLD.codename}/config.yaml\n`,
     },
     passesBecause: "frozen release migrations record what an older version wrote",
   },
   {
     rule: "hardcoded-home",
     triggers: {
-      "packages/jinn/src/thing.ts": 'export const home = path.join(os.homedir(), ".jinn");\n',
+      "packages/hundredfold/src/thing.ts": 'export const home = path.join(os.homedir(), ".hundredfold");\n',
     },
     passes: {
-      "packages/jinn/src/engines/other.ts":
+      "packages/hundredfold/src/engines/other.ts":
         'export const codex = path.join(os.homedir(), ".codex", "sessions");\n' +
         'export const grok = path.join(os.homedir(), ".grok", "sessions");\n',
     },
@@ -99,17 +100,17 @@ const RULE_CASES = [
   },
   {
     rule: "hardcoded-port",
-    triggers: { "packages/jinn/src/gateway/probe.ts": "const url = `http://127.0.0.1:7777/api/status`;\n" },
+    triggers: { "packages/hundredfold/src/gateway/probe.ts": "const url = `http://127.0.0.1:7777/api/status`;\n" },
     passes: {
-      "packages/jinn/src/cli/setup.ts": "const DEFAULT_CONFIG = { gateway: { port: 7777, host: \"127.0.0.1\" } };\n",
+      "packages/hundredfold/src/cli/setup.ts": "const DEFAULT_CONFIG = { gateway: { port: 7777, host: \"127.0.0.1\" } };\n",
     },
     passesBecause: "DEFAULT_CONFIG is where the literal is defined",
   },
   {
     rule: "scattered-env",
-    triggers: { "packages/jinn/src/gateway/probe.ts": "const home = process.env.JINN_HOME;\n" },
+    triggers: { "packages/hundredfold/src/gateway/probe.ts": `const home = process.env.${OLD.upper}_HOME;\n` },
     passes: {
-      "packages/jinn/src/gateway/seam.ts":
+      "packages/hundredfold/src/gateway/seam.ts":
         "export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {\n" +
         "  return { ...env };\n}\n",
     },
@@ -124,7 +125,7 @@ const RULE_CASES = [
       // The token file owns the material, and a test may name a filter to assert it is gone.
       "packages/web/src/routes/glass-identity.css": ".glass-float { backdrop-filter: var(--glass-blur); }\n",
       "packages/web/src/components/__tests__/bar.test.tsx": 'expect(el.style.backdropFilter).toBe("")\n',
-      "packages/jinn/src/gateway/page.ts": 'const css = "backdrop-filter: blur(4px)";\n',
+      "packages/hundredfold/src/gateway/page.ts": 'const css = "backdrop-filter: blur(4px)";\n',
     },
     passesBecause: "the glass token file defines the material, tests assert on it, and only the web app is in scope",
   },
@@ -140,21 +141,21 @@ const RULE_CASES = [
         'import { Slot } from "./slot"\nimport { Search } from "@/components/ui/icon"\n' +
         'import { Command } from "cmdk-like"\nimport { useRadixThing } from "@/hooks/radix-ui-compat"\n',
       "packages/web/docs/notes.md": "Replaced `lucide-react` and `radix-ui`.\n",
-      "packages/jinn/src/other.ts": 'import { Search } from "lucide-react"\n',
+      "packages/hundredfold/src/other.ts": 'import { Search } from "lucide-react"\n',
     },
     passesBecause: "only the web app's code is in scope, and only the exact libraries count",
   },
   {
     rule: "spawn-without-stdio",
     triggers: {
-      "packages/jinn/src/download.ts":
+      "packages/hundredfold/src/download.ts":
         'import { spawn } from "node:child_process";\n' + 'const curl = spawn("curl", ["-L", "-o", target, url]);\n',
     },
     passes: {
       // Each of these would be reported the moment the rule went back to
       // grepping for `spawn(` and `exec(`: the two async calls take no options
       // object here, and node-pty's spawn is given one without stdio.
-      "packages/jinn/src/async-calls.ts":
+      "packages/hundredfold/src/async-calls.ts":
         'import { exec, execFile } from "node:child_process";\n' +
         'import pty from "node-pty";\n' +
         'const term = pty.spawn(bin, args, { cols: 80, rows: 24 });\n' +
@@ -216,8 +217,8 @@ test("removed-ui-library judges only the lines a change adds", () => {
 
 test("a frozen migration excuses the historical path, never a live leak", () => {
   const root = repoWith({
-    "packages/jinn/template/migrations/0001-initial/notes.md":
-      "Wrote /Users/someone/.jinn/config.yaml\nContact dev@acme-widgets.io\n",
+    "packages/hundredfold/template/migrations/0001-initial/notes.md":
+      `Wrote /Users/someone/.${OLD.codename}/config.yaml\nContact dev@acme-widgets.io\n`,
   })
 
   const { status, stdout } = check(root, "--all")
@@ -278,7 +279,7 @@ test("the files that describe the rules are excluded from them", () => {
 
 test("`footgun: ok <reason>` suppresses across different rules", () => {
   const root = repoWith({
-    "packages/jinn/src/thing.ts":
+    "packages/hundredfold/src/thing.ts":
       'export const cache = "/Users/someone/.cache"; // footgun: ok fixture for a path-mangling test\n' +
       "const port = 7777; // footgun: ok asserts the documented default\n",
   })
@@ -290,28 +291,28 @@ test("`footgun: ok <reason>` suppresses across different rules", () => {
 })
 
 test("a suppression with no reason still suppresses, and is named as unaudited", () => {
-  const root = repoWith({ "packages/jinn/src/thing.ts": 'export const cache = "/Users/someone"; // footgun: ok\n' })
+  const root = repoWith({ "packages/hundredfold/src/thing.ts": 'export const cache = "/Users/someone"; // footgun: ok\n' })
 
   const { status, stdout } = check(root, "--all")
   assert.equal(totalViolations(stdout), 0, stdout)
   assert.equal(status, 0)
   assert.match(stdout, /1 suppression \(1 unaudited\)/)
-  assert.match(stdout, /^ {2}packages\/jinn\/src\/thing\.ts:1 {2}personal-path$/m)
+  assert.match(stdout, /^ {2}packages\/hundredfold\/src\/thing\.ts:1 {2}personal-path$/m)
 })
 
 test("diff mode judges added lines only, never the debt already in the file", () => {
   const existing =
     'const a = "/Users/someone/one";\nconst b = "/Users/someone/two";\nconst c = "/Users/someone/three";\n'
-  const root = repoWith({ "packages/jinn/src/thing.ts": existing })
+  const root = repoWith({ "packages/hundredfold/src/thing.ts": existing })
   git(root, "commit", "-m", "existing debt")
   git(root, "checkout", "-b", "feature")
-  fs.writeFileSync(path.join(root, "packages/jinn/src/thing.ts"), `${existing}const d = "/Users/someone/four";\n`)
+  fs.writeFileSync(path.join(root, "packages/hundredfold/src/thing.ts"), `${existing}const d = "/Users/someone/four";\n`)
   git(root, "commit", "--all", "-m", "one more")
 
   const diffRun = check(root, "--diff", "main")
   assert.equal(totalViolations(diffRun.stdout), 1, diffRun.stdout)
   assert.equal(diffRun.status, 1)
-  assert.match(diffRun.stdout, /^packages\/jinn\/src\/thing\.ts:4$/m)
+  assert.match(diffRun.stdout, /^packages\/hundredfold\/src\/thing\.ts:4$/m)
 
   // The three it ignored are violations, not lines the rule simply misses.
   assert.equal(totalViolations(check(root, "--all").stdout), 4)
@@ -371,4 +372,26 @@ test("CI runs the checker over the diff, and these tests ride the repository's n
   const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"))
   assert.match(pkg.scripts["test:node"], /scripts\/__tests__\/check-footguns\.test\.mjs/)
   assert.match(pkg.scripts.test, /pnpm test:node/)
+})
+
+test("diff mode does not count a line that only changed because the product was renamed", () => {
+  const before = `const note = "/Users/someone/${OLD.codename}";\n`
+  const root = repoWith({ "packages/hundredfold/src/thing.ts": before })
+  git(root, "commit", "-m", "before")
+  git(root, "checkout", "-b", "feature")
+  fs.writeFileSync(path.join(root, "packages/hundredfold/src/thing.ts"), 'const note = "/Users/someone/hundredfold";\n')
+  git(root, "commit", "--all", "-m", "rename")
+  assert.equal(totalViolations(check(root, "--diff", "main").stdout), 0)
+})
+
+test("a removed line that spells a name in mixed case does not stop the gate", () => {
+  const mixed = OLD.codename.split("").map((letter, index) => (index % 2 === 0 ? letter.toUpperCase() : letter)).join("")
+  const root = repoWith({ "pnpm-lock.yaml": `integrity: sha512-q9${mixed}Z0x==\n` })
+  git(root, "commit", "-m", "lock")
+  git(root, "checkout", "-b", "feature")
+  fs.writeFileSync(path.join(root, "pnpm-lock.yaml"), "integrity: sha512-other==\n")
+  git(root, "commit", "--all", "-m", "bump")
+  const run = check(root, "--diff", "main")
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(totalViolations(run.stdout), 0)
 })

@@ -4,11 +4,11 @@ Each entry: the question, what was found (with where), and the decision it led t
 
 ## R1. Is there a config-mutation path the page can reuse, or does it need its own?
 
-**Found**: `PUT /api/config` (`packages/jinn/src/gateway/api.ts:4530`) accepts a **partial**
+**Found**: `PUT /api/config` (`packages/hundredfold/src/gateway/api.ts:4530`) accepts a **partial**
 body — "a PUT body is partial" is stated at the merge — deep-merges it into `config.yaml`
 (`config-payload.ts:98`), runs `validateConfigShape` on the merged result (`api.ts:4579`),
 which already includes `idleCapacityProblems` (`shared/config.ts:71`), writes atomically and
-calls `reloadConfig` (`api.ts:4582`). It refuses a stale `X-Jinn-Config-Revision`
+calls `reloadConfig` (`api.ts:4582`). It refuses a stale `X-Hundredfold-Config-Revision`
 (`api.ts:4546`) so a hand edit under an open page is never overwritten. It is operator-only
 (`api.ts:910`). The web side already has the hook that drives it — `useConfigCommit`
 (`packages/web/src/routes/settings/use-config-commit.ts:96`) — with the debounce, the
@@ -44,7 +44,7 @@ missing on a fresh instance) and the revision.
 
 **Decision** (revised on review): a fourth read-only route in the domain module,
 `GET /api/idle-capacity/policy`, returns `{ policy, configured }` — the resolved policy and
-the raw file block — with the `X-Jinn-Config-Revision` header, exactly as `GET /api/config`
+the raw file block — with the `X-Hundredfold-Config-Revision` header, exactly as `GET /api/config`
 sets it. No collector, no loop. The form is seeded from `policy` and the revision adopted from
 the same response. `configured` is what makes the minimal-write alternative in Open Decision
 1 possible; the whole block is written regardless, for legibility.
@@ -106,7 +106,7 @@ passes through, including the loop's direct call (`idle-capacity.ts:154`; the
 the engine-health store's swallow-own-errors pattern. Conditions from review round 0:
 
 - **Atomic under concurrency.** `engine-health-store.ts:70` renames from a fixed `.tmp`
-  name; the gateway, `jinn limits` on the same host, and the preview/Limits/loop readers
+  name; the gateway, `hundredfold limits` on the same host, and the preview/Limits/loop readers
   in-process can overlap. The history writes whole under a per-process temporary name and
   renames (`saveConfigAtomic`, `config.ts:286`). A lost sample under a race is accepted.
 - **Collapse window above the poll period.** The page polls the preview every 60 s and each

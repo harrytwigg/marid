@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(repoRoot, "packages", "web", "out");
-const target = path.join(repoRoot, "packages", "jinn", "dist", "web");
+const target = path.join(repoRoot, "packages", "hundredfold", "dist", "web");
 const stamp = `${process.pid}-${Date.now()}`;
 const nextIndex = path.join(target, `.index-next-${stamp}.html`);
 

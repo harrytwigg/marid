@@ -234,7 +234,7 @@ Todo under `skipped` with reason `autoStart is false`; switch it on and it is el
 - A comment the operator edited by hand may no longer parse; it is listed with the fields the
   parser could recover and the rest blank, never dropped.
 - The resolved policy and the config revision arrive in ONE response
-  (`GET /api/idle-capacity/policy`, which carries `X-Jinn-Config-Revision`), so the form
+  (`GET /api/idle-capacity/policy`, which carries `X-Hundredfold-Config-Revision`), so the form
   cannot be edited against values from one file state and a revision from another; the
   write hook refuses to send until that revision is held, because a PUT with no revision
   bypasses the staleness check by design. A save adopts the revision the PUT returns — and
@@ -253,7 +253,7 @@ Todo under `skipped` with reason `autoStart is false`; switch it on and it is el
   to seven days (2 016 samples at that cadence) and, as a safety cap the collapse never
   reaches, 2 500 samples — about 350 KB rewritten at most once per five minutes. The page
   polls usage on that same five-minute cadence; nothing new can appear sooner.
-  Two writers can race (the gateway and `jinn limits` on the same host, or two in-process
+  Two writers can race (the gateway and `hundredfold limits` on the same host, or two in-process
   readers): the file is written whole under a per-process temporary name and renamed, so a
   race loses one sample, never the file.
 

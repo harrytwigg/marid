@@ -28,7 +28,7 @@ vi.mock("@/hooks/use-workspaces", () => ({
 import { PageLayout } from "../page-layout"
 
 function renderPage() {
-  localStorage.setItem("jinn-onboarded", "true")
+  localStorage.setItem("hundredfold-onboarded", "true")
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>

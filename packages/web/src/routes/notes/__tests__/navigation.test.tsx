@@ -8,7 +8,7 @@ import { NAV_ITEMS, MOBILE_TAB_ITEMS, OVERFLOW_HREFS, navigationFor } from "@/li
 import { queryKeys } from "@/lib/query-keys"
 import { STATIC_PAGES, staticPagesFor } from "@/components/global-search"
 import { useQueryInvalidation } from "@/hooks/use-query-invalidation"
-import type { GatewayEvent, GatewayEventListener } from "@jinn/gateway-events"
+import type { GatewayEvent, GatewayEventListener } from "@hundredfold/gateway-events"
 
 let gatewayListener: ((event: string, payload: unknown) => void) | undefined
 

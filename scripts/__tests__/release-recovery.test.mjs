@@ -46,7 +46,7 @@ test("absent version waits the full window and reports visibility, not publish f
   const fetchImpl = async () => new Response(JSON.stringify({ versions: {} }))
   await assert.rejects(awaitNpmVersion(version, { ...timing, fetchImpl }), (error) => {
     assert.ok(error instanceof Error)
-    assert.match(error.message, /npm jinn-cli@1.2.3 not yet visible after 7 seconds/)
+    assert.match(error.message, /npm hundredfold@1.2.3 not yet visible after 7 seconds/)
     assert.doesNotMatch(error.message, /workflow.*failed/)
     t.diagnostic(error.message)
     return true

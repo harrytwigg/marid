@@ -3,7 +3,7 @@
 //
 //   node board-move-frames.mjs <sandbox-home> <base-url> <out-dir> [moves]
 //
-// Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) at phone
+// Runs in the browser HUNDREDFOLD_CAPTURE_BROWSER names (Firefox by default) at phone
 // width with touch, the way the reporter saw it. One card is moved back and
 // forth between In progress and In review with the card's "Move to…" menu — the
 // phone's move, sharing the status lane with the desktop drag — while a
@@ -23,7 +23,7 @@ const MOVES = Number(movesArg ?? 10)
 if (!Number.isInteger(MOVES) || MOVES < 1) throw new Error(`moves must be a positive integer, got ${movesArg}`)
 const headers = authHeaders(sandboxHome)
 fs.mkdirSync(outDir, { recursive: true })
-const isChromium = process.env.JINN_CAPTURE_BROWSER === 'chromium'
+const isChromium = process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium'
 const browser = await (isChromium ? chromium : firefox).launch()
 const VIEWPORT = { width: 390, height: 844 }
 
@@ -39,7 +39,7 @@ const COLUMNS = {
 /** @typedef {Window & { __boardFrames?: { id: string | null, recording: boolean, samples: string[][] } }} FrameProbeWindow */
 
 const context = await browser.newContext({ viewport: VIEWPORT, hasTouch: true, extraHTTPHeaders: headers, colorScheme: 'light' })
-await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
 // Installed before the app loads, so the first frame after a repaint is already
 // being watched: each frame records the columns whose subtree holds the card.
 await context.addInitScript(() => {

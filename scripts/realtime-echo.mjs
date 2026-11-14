@@ -10,7 +10,7 @@
  *
  * Usage: node scripts/realtime-echo.mjs [--key sk-...] [--model gpt-realtime]
  *
- * Reads the key from --key or OPENAI_API_KEY. Never reads ~/.jinn. Exits
+ * Reads the key from --key or OPENAI_API_KEY. Never reads ~/.hundredfold. Exits
  * non-zero with an explicit reason rather than skipping quietly, so a run that
  * proved nothing can never read as a pass.
  */
@@ -19,7 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PROVIDER_MODULE = path.join(REPO_ROOT, "packages/jinn/dist/src/talk/realtime/index.js");
+const PROVIDER_MODULE = path.join(REPO_ROOT, "packages/hundredfold/dist/src/talk/realtime/index.js");
 const OUT_DIR = path.join(REPO_ROOT, "tmp/realtime-echo");
 const SAMPLE_RATE = 24000;
 const PROMPT = "Hello! Can you hear me? Please say hello back and count to three.";

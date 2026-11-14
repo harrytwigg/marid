@@ -6,8 +6,8 @@ import baseline from "./eslint-baseline.json" with { type: "json" }
 // are exactly the ones their package tsconfigs already cover, so the project
 // service finds each file's project by walking up to the package root.
 const PACKAGE_TREES = [
-  "packages/jinn/bin/**/*.ts",
-  "packages/jinn/src/**/*.ts",
+  "packages/hundredfold/bin/**/*.ts",
+  "packages/hundredfold/src/**/*.ts",
   "packages/web/**/*.{ts,tsx}",
   "packages/gateway-events/src/**/*.ts",
   // The shell package's TypeScript stays at its package root;
@@ -42,7 +42,7 @@ const HEROUI_BARREL = {
 }
 const LUCIDE_PATH = {
   name: "lucide-react",
-  message: "Import icons from \"@/components/ui/icon\"; its modules are generated from Phosphor's duotone sources (pnpm --filter @jinn/web icons).",
+  message: "Import icons from \"@/components/ui/icon\"; its modules are generated from Phosphor's duotone sources (pnpm --filter @hundredfold/web icons).",
 }
 const LUCIDE_PATTERN = { group: ["lucide-react/*"], message: "Import icons from \"@/components/ui/icon\"." }
 
@@ -214,7 +214,7 @@ export default [
       "**/coverage/**",
       "**/test-results/**",
       "**/.turbo/**",
-      "packages/jinn/template/**",
+      "packages/hundredfold/template/**",
       // `.mjs` is absent: it is the extension the root trees are written in, and
       // a global ignore outranks every `files` entry, so listing it here would
       // mask `LINTED` rather than complement it. A stray `.mjs` outside those

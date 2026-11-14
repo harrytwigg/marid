@@ -12,7 +12,7 @@ import { parseTalkControlManifest, type TalkControlManifest } from "./control-ma
 import type { TalkUiEffect } from "./ui-effects"
 import { browserInstanceId } from "../context/browser-instance"
 import type { TalkScreenContext } from "../context/page-snapshot"
-import { decodeGatewayEvent, type TalkProactiveCuePayload } from "@jinn/gateway-events"
+import { decodeGatewayEvent, type TalkProactiveCuePayload } from "@hundredfold/gateway-events"
 import type { InterruptionTelemetry } from "./false-start-recovery"
 import { parseOpenedSession } from "./opened-session"
 

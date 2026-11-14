@@ -260,7 +260,7 @@ function retryRecoversOneAssertion(pkgDir) {
 
 function runWrapper({ pkgDir, planPath, logPath, summaryPath }, extraEnv) {
   /** @type {NodeJS.ProcessEnv} */
-  const env = { ...process.env, JINN_TEST_GLOBAL_CORES: "0", STUB_PLAN: planPath, STUB_LOG: logPath }
+  const env = { ...process.env, HUNDREDFOLD_TEST_GLOBAL_CORES: "0", STUB_PLAN: planPath, STUB_LOG: logPath }
   delete env.CI
   delete env.GITHUB_STEP_SUMMARY
   Object.assign(env, extraEnv)

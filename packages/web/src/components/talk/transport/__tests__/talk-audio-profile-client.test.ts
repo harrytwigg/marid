@@ -44,7 +44,7 @@ beforeEach(() => {
  */
 describe("who decides the Talk audio profile", () => {
   it("does not send a noise-reduction preference when opening a session", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ talkMicrophone: "near_field" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ talkMicrophone: "near_field" }))
     authFetch.mockResolvedValue(json({ id: "talk-1", token: "secret", manifest: MANIFEST }))
 
     await openTalkSession()
@@ -75,7 +75,7 @@ describe("who decides the Talk audio profile", () => {
   })
 
   it("asks for nothing on resume either — the config has not moved", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ talkMicrophone: "near_field" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ talkMicrophone: "near_field" }))
     authFetch.mockResolvedValue(json({ token: "fresh", expiresAt: 99 }))
 
     await resumeTalkSession("talk-1")

@@ -1,0 +1,371 @@
+/**
+ * Fallback chains: the shapes and sentences shared by the gateway and the web.
+ *
+ * A chain is an ordered list of targets. Each link names an engine, and may name
+ * a profile (a declared account under `engines.claude.accounts`) and a model. A
+ * turn that cannot be served by its own target walks the chain in order, trying
+ * each target at most once, until one serves it. See docs/fallback-chains.md.
+ *
+ * Like `fallback-map-wire.ts`, this module is a pure leaf with no imports:
+ * `packages/web` aliases it as `@hundredfold/fallback-chain-wire` and bundles it, so the
+ * config loader and the Settings editor refuse a broken chain in the same words.
+ */
+
+/** One target in a chain, as config spells it in its object form. */
+export interface FallbackLink {
+  engine: string;
+  /** A declared account name under `engines.claude.accounts`. Absent: the
+   *  default Claude profile. Only Claude links take a profile. */
+  profile?: string;
+  /** A model id the engine serves (`provider/model` for opencode). Absent: the
+   *  session's own model on the same engine, otherwise the `fallbackModelMap`
+   *  translation, otherwise the engine's default. */
+  model?: string;
+}
+
+/**
+ * A chain entry as config may hold it. The string forms are the legacy ones and
+ * keep their legacy meaning: an engine name or `claude:<name>` stands for that
+ * target followed by its own chain, walked as before; an object is exactly one
+ * target.
+ */
+export type FallbackChainEntry = string | FallbackLink;
+
+/** Why a link was left without trying it, or why the walk moved past it. */
+export type FallbackSkipReason =
+  | "tried" // already tried in this run (the loop guard)
+  | "not-installed"
+  | "scoped" // a department-scoped session runs on Claude accounts only
+  | "remote" // the engine or profile cannot run on the session's host
+  | "exhausted" // health says it is at its limit; tried only if nothing else is left
+  | "model-not-served"
+  | "profile-unknown";
+
+/** Why a run moved from one target to the next. */
+export type FallbackHopReason =
+  | "rate-limit"
+  | "quota"
+  | "billing" // a prepaid balance ran dry; no clock refills it
+  | "retry-exhausted" // the engine gave up on its own provider retries
+  | "invalid-model" // a model the target does not serve: on a fallback link, or an opencode model the account is not enabled for (also on the session's own target)
+  | "auth"; // a Claude fallback link's profile is signed out, or an opencode provider's key is expired or invalid
+
+/** Limit state of one target, from engine health and the latest limits reading. */
+export interface FallbackLinkHealth {
+  state: "ok" | "degraded" | "exhausted" | "unknown";
+  /** ISO time the limit is expected to clear. */
+  until?: string;
+  /** Highest used percentage across the account's windows, when a reading has one. */
+  usedPercent?: number;
+  /** The window that is binding, e.g. "5h" or "weekly". */
+  window?: string;
+  /** Why an opencode target is out: a spent allowance, a dead key, or a model the account is not enabled for. */
+  failureClass?: "quota" | "auth" | "model-access";
+}
+
+/** A link as the gateway resolved it for one subject or session. */
+export interface ResolvedFallbackLink extends FallbackLink {
+  /** Stable identity of the target: see {@link fallbackLinkKey}. */
+  key: string;
+  /** The per-account store key the target runs as (`claude`, `claude:<profile key>`, `opencode`, ...). */
+  account: string;
+  /** Short operator-facing name, e.g. "claude · work · sonnet". */
+  label: string;
+  /** "config" for a written link; "legacy" for one expanded from a string entry's own chain. */
+  origin: "config" | "legacy";
+  /** The link as config spells it, before the gateway filled in the model it would run
+   *  (`model` above is that resolved model). This is what an editor shows as the
+   *  operator's choice and writes back; writing `engine`/`profile`/`model` instead would
+   *  pin a model the operator never chose. Always set by the gateway. */
+  written?: FallbackLink;
+  /** Present when the link cannot be used at all for this subject or session. */
+  skip?: FallbackSkipReason;
+  /** The skip in the gateway's words, when it has more to say than the reason:
+   *  for a session on a remote host, which host lacks the engine's CLI. */
+  skipDetail?: string;
+  health?: FallbackLinkHealth;
+  /** An opencode link naming no model: the provider its turns run on (the engine's configured model's), so
+   *  health is read under `opencode/<provider>`. Set on a session's or employee's own link only, and never
+   *  pins the session's model. */
+  healthProvider?: string;
+}
+
+/** A link a hop passed over. */
+export interface FallbackHopSkip {
+  key: string;
+  reason: FallbackSkipReason;
+  detail?: string;
+}
+
+/** One move along a chain, recorded on the session and announced in its transcript. */
+export interface FallbackHop {
+  at: string;
+  from: string; // link key
+  to: string | null; // link key; null when the chain ran out and the session waits
+  fromLabel: string;
+  toLabel: string | null;
+  reason: FallbackHopReason;
+  /** The failing target's reset, when it stated one. */
+  resetsAt?: string;
+  /** Links passed over on the way to `to`, with why (`detail`: the link's `skipDetail`). */
+  skipped?: FallbackHopSkip[];
+}
+
+/**
+ * The `meta` of the transcript notice that announces a hop: a `notification`
+ * message whose `meta.fallbackHop` is the hop. The web renders it as a card; a
+ * notification without the key is an ordinary notice.
+ */
+export interface FallbackHopNoticeMeta {
+  fallbackHop: FallbackHop;
+}
+
+/** Where a session's chain came from, highest precedence first. */
+export type FallbackChainSource = "session" | "employee" | "account" | "engine" | "none";
+
+/** A session's chain as the session API reports it (`fallback.chain`). */
+export interface SessionFallbackChainView {
+  source: FallbackChainSource;
+  /** Index 0 is the session's own target; the rest is the chain in order. */
+  links: ResolvedFallbackLink[];
+  /** Index into `links` of the target the session is on now. */
+  position: number;
+  /** Key of the target that served the latest turn, if any turn ran. */
+  servedBy: string | null;
+  /** Key of the target the next limit would move to, if any. */
+  next: string | null;
+  /** Most recent first, at most 20. */
+  hops: FallbackHop[];
+}
+
+/** A Claude profile a chain link may name. */
+export interface FallbackProfileOption {
+  name: string;
+  account: string;
+  /** The profile directory: on the gateway, or on `remote.host` when that is set. */
+  configDir: string;
+  /** Set for an account declared on another host (`remoteHost`): only a remote employee on the same
+   *  `destination` (`user@host`, or the bare host with no user) can fall back to it. Absent: a local profile. */
+  remote?: { host: string; destination: string };
+}
+
+/** Where an employee runs, as an account is matched to it: `destination` is `user@host`, or the bare host with no user. Absent for a local employee. */
+export interface FallbackEmployeeHost {
+  host: string;
+  destination: string;
+}
+
+/**
+ * Why a declared account may not be named by an employee's chain, or undefined when it may: a remote
+ * employee falls back only to an account declared on its own `user@host`, a local one to no remote
+ * account. `at` is the sentence's subject (`fallback[0]: profile "x"`); `remote` is the account's
+ * `remote` (absent for a local profile). A name that is declared nowhere is not this function's: the
+ * validator refuses it as naming no account.
+ */
+export function employeeProfileHostProblem(at: string, remote: { destination: string } | undefined, employee: FallbackEmployeeHost | undefined): string | undefined {
+  if (!employee) return remote ? `${at} is declared on ${remote.destination}; a local employee falls back only to a local account` : undefined;
+  if (!remote) return `${at} is a local profile; a remote employee falls back only to an account declared with remoteHost ${employee.host}`;
+  return remote.destination === employee.destination ? undefined : `${at} is declared on ${remote.destination}, not ${employee.destination}`;
+}
+
+/** One editable chain: an engine default, a declared account's, or an employee's. */
+export interface FallbackChainSubject {
+  kind: "engine" | "account" | "employee";
+  /** Engine name, account name, or employee name. */
+  id: string;
+  /** The target the chain falls back from (the employee's own target; for an engine
+   *  or account, its default model). */
+  primary: ResolvedFallbackLink | null;
+  /** The chain as written, normalised to links. Null: the subject writes none (an
+   *  employee then inherits; an engine or account has no fallback). */
+  configured: FallbackLink[] | null;
+  /** True when `configured` came from string entries, whose own chains expand. */
+  legacy: boolean;
+  /** What would run, in order, after legacy expansion and de-duplication. */
+  effective: ResolvedFallbackLink[];
+  /** An employee only: where `effective` comes from. `employee` is its own chain; an
+   *  inherited one is its declared account's (`account`, named by `sourceId`) or its
+   *  engine's (`engine`, named by `sourceId`); `none` is a named profile that is not
+   *  declared, which has no fallback. The gateway decides this, so a client never
+   *  reconstructs it. */
+  source?: Exclude<FallbackChainSource, "session">;
+  sourceId?: string;
+  /** What is wrong with the chain the subject wrote. A repeated target is tolerated (the
+   *  chain is kept and lists it once); an employee whose YAML chain failed validation at
+   *  load inherits instead. Absent when nothing is wrong. */
+  problems?: string[];
+}
+
+/** `GET /api/fallback-chains` (with `?employee=<name>` an employee subject is added). */
+export interface FallbackChainsResponse {
+  profiles: FallbackProfileOption[];
+  subjects: FallbackChainSubject[];
+}
+
+const CONTROL_CHARACTER_RE = new RegExp("[\\u0000-\\u001f\\u007f]");
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+/**
+ * One entry as a link, or null when it is neither form. `claude:<name>` becomes a
+ * Claude link on that profile and any other string an engine-only link; whether
+ * the names exist is {@link fallbackChainProblems}'s question, not this one's.
+ */
+export function fallbackLinkOf(entry: unknown): FallbackLink | null {
+  if (typeof entry === "string") {
+    const text = entry.trim();
+    if (!text) return null;
+    if (text.startsWith("claude:")) return { engine: "claude", profile: text.slice("claude:".length) };
+    return { engine: text };
+  }
+  if (!isRecord(entry)) return null;
+  const engine = optionalText(entry.engine);
+  if (!engine) return null;
+  const profile = optionalText(entry.profile);
+  const model = optionalText(entry.model);
+  return { engine, ...(profile ? { profile } : {}), ...(model ? { model } : {}) };
+}
+
+/** Identity of a target: two links with the same key are the same target. */
+export function fallbackLinkKey(link: FallbackLink): string {
+  return `${link.engine}|${link.profile ?? ""}|${link.model ?? ""}`;
+}
+
+/** Operator-facing name of a link, e.g. "claude · work · sonnet" or "opencode · openrouter/x". */
+export function fallbackLinkLabel(link: FallbackLink): string {
+  return [link.engine, link.profile, link.model].filter(Boolean).join(" · ");
+}
+
+/** An opencode account as a chain link's validation sees it (`engines.opencode.accounts`). */
+export interface FallbackOpencodeAccount {
+  name: string;
+  /** The provider id links name: `<provider>/<model>`. */
+  provider: string;
+  /** The model ids the account serves, without the provider. Absent: not known (a built-in provider, or the catalogue is not). */
+  models?: readonly string[];
+  keyEnv?: string;
+  /** The gateway's environment has no value for `keyEnv`. Set only where an environment is known (never in the web). */
+  keyMissing?: boolean;
+  /** The account's base has models but its endpoint records have not loaded, so its staged block would be empty. */
+  unstaged?: boolean;
+}
+
+/** What chain validation knows of opencode's models and accounts. */
+export interface FallbackOpencodeContext {
+  accounts: readonly FallbackOpencodeAccount[];
+  /** The provider ids of opencode's catalogue. Absent or empty: the catalogue is not known, so no provider is called unknown. */
+  providers?: ReadonlySet<string>;
+}
+
+/** What the validator needs to know about the instance. */
+export interface FallbackChainContext {
+  /** Every engine name this build knows. */
+  engines: readonly string[];
+  /** Declared account names under `engines.claude.accounts`. */
+  profiles: ReadonlySet<string>;
+  /** The target the chain falls back from, where it is known: a link equal to it
+   *  is refused. For an engine default it is `{engine}`, for an account
+   *  `{engine: "claude", profile}`. */
+  self?: FallbackLink;
+  /** Asked about each duplicate; returning true tolerates it (the first entry stays and
+   *  no problem is reported). The loader tolerates what the legacy validator accepted. */
+  onDuplicate?: (duplicate: FallbackChainDuplicate) => boolean;
+  /** opencode's accounts and catalogue, where they are known: an opencode link is then
+   *  checked against them. Absent (a config load, which has no catalogue): nothing is. */
+  opencode?: FallbackOpencodeContext;
+}
+
+/** A chain entry that repeats an earlier one, as {@link FallbackChainContext.onDuplicate} sees it. */
+export interface FallbackChainDuplicate {
+  where: string;
+  chain: readonly unknown[];
+  index: number;
+  first: number;
+  problem: string;
+}
+
+function profileProblems(where: string, link: FallbackLink, ctx: FallbackChainContext): string[] {
+  if (link.profile === undefined) return [];
+  if (link.engine !== "claude") return [`${where}: only a claude target takes a profile`];
+  return ctx.profiles.has(link.profile) ? [] : [`${where}: profile "${link.profile}" names no account under engines.claude.accounts`];
+}
+
+function modelProblems(where: string, entry: unknown): string[] {
+  if (!isRecord(entry) || entry.model === undefined) return [];
+  const { model } = entry;
+  return typeof model === "string" && model.trim() && !CONTROL_CHARACTER_RE.test(model) ? [] : [`${where}.model must be a model id`];
+}
+
+/**
+ * What is wrong with an opencode link `provider/model` given what is known of the
+ * accounts and the catalogue: a model its account does not serve, an account whose
+ * key variable is unset (server side only), a provider that is neither an account's
+ * nor in the catalogue (only when the catalogue is known). Advisory: the catalogue
+ * is not known at config load, so a chain is never refused for these.
+ */
+export function opencodeLinkProblems(where: string, link: FallbackLink, opencode: FallbackOpencodeContext | undefined): string[] {
+  if (!opencode || link.engine !== "opencode" || link.model === undefined) return [];
+  const slash = link.model.indexOf("/");
+  if (slash <= 0) return [];
+  const provider = link.model.slice(0, slash);
+  const account = opencode.accounts.find((a) => a.provider === provider);
+  if (account) return accountLinkProblems(where, link.model, link.model.slice(slash + 1), account);
+  const known = opencode.providers;
+  return known && known.size > 0 && !known.has(provider) ? [`${where}: provider "${provider}" is not in opencode's catalogue or engines.opencode.accounts`] : [];
+}
+
+function accountLinkProblems(where: string, id: string, model: string, account: FallbackOpencodeAccount): string[] {
+  return [
+    ...(account.models !== undefined && !account.models.includes(model) ? [`${where}: model "${id}" is not served by account "${account.name}"`] : []),
+    ...(account.unstaged ? [`${where}: account "${account.name}": the base's endpoints are not known yet (model details have not loaded)`] : []),
+    ...(account.keyMissing && account.keyEnv ? [`${where}: account "${account.name}" has no key: ${account.keyEnv} is not set`] : []),
+  ];
+}
+
+function entryProblems(where: string, entry: unknown, ctx: FallbackChainContext): string[] {
+  const link = fallbackLinkOf(entry);
+  if (!link) return [`${where} must be an engine name or a mapping with engine, profile and model`];
+  const engine = ctx.engines.includes(link.engine) ? [] : [`${where}: "${link.engine}" is not a known engine (${ctx.engines.join(", ")})`];
+  return [...engine, ...profileProblems(where, link, ctx), ...modelProblems(where, entry), ...opencodeLinkProblems(where, link, ctx.opencode)];
+}
+
+/**
+ * Problems with one chain (empty = valid). Refused: an entry of neither form, an
+ * unknown engine, a profile on a non-Claude link or naming no declared account,
+ * a model that is not an id, a link that is the chain's own target, and a link
+ * listed twice. Distinct targets are all accepted, including the same engine on
+ * another profile or model.
+ */
+export function fallbackChainProblems(where: string, chain: unknown, ctx: FallbackChainContext): string[] {
+  if (chain === undefined) return [];
+  if (!Array.isArray(chain)) return [`${where} must be a list of fallback targets`];
+  const problems: string[] = [];
+  const seen = new Map<string, number>();
+  const selfKey = ctx.self ? fallbackLinkKey(ctx.self) : undefined;
+  chain.forEach((entry, index) => {
+    const at = `${where}[${index}]`;
+    const own = entryProblems(at, entry, ctx);
+    problems.push(...own);
+    const link = fallbackLinkOf(entry);
+    if (!link || own.length > 0) return;
+    const key = fallbackLinkKey(link);
+    if (key === selfKey) {
+      problems.push(`${at} (${fallbackLinkLabel(link)}) is the target this chain falls back from; give it another profile or model`);
+      return;
+    }
+    const first = seen.get(key);
+    if (first !== undefined) {
+      const problem = `${at} duplicates ${where}[${first}] (${fallbackLinkLabel(link)}): a chain tries each target once, so list it once`;
+      if (!ctx.onDuplicate?.({ where, chain, index, first, problem })) problems.push(problem);
+    } else {
+      seen.set(key, index);
+    }
+  });
+  return problems;
+}

@@ -88,7 +88,7 @@ export function clampEffort(levels: string[], current: string | undefined): stri
 
 /**
  * The provider segment of a namespaced `provider/model` id. opencode and pi both
- * build ids this way (`packages/jinn/src/shared/opencode-models.ts`,
+ * build ids this way (`packages/hundredfold/src/shared/opencode-models.ts`,
  * `pi-models.ts`); every other engine's catalog is bare ids (`opus`, `gpt-5.5`)
  * and returns '' so callers render no badge.
  */

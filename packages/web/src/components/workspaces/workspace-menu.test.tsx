@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from "vitest"
 import { WorkspaceLauncher, type WorkspaceInfo } from "./workspace-menu"
 
 const workspaces: WorkspaceInfo[] = [
-  { id: "main", name: "jinn", displayName: "Main company", port: 7777, running: true, current: true, switchUrl: "https://machine.example.ts.net/" },
-  { id: "team", name: "jinn-team", displayName: "Team company", port: 7801, running: true, current: false, switchUrl: "https://machine.example.ts.net:7801/" },
-  { id: "offline", name: "jinn-offline", displayName: "Offline company", port: 7802, running: false, current: false, switchUrl: "https://machine.example.ts.net:7802/" },
+  { id: "main", name: "hundredfold", displayName: "Main company", port: 7777, running: true, current: true, switchUrl: "https://machine.example.ts.net/" },
+  { id: "team", name: "hundredfold-team", displayName: "Team company", port: 7801, running: true, current: false, switchUrl: "https://machine.example.ts.net:7801/" },
+  { id: "offline", name: "hundredfold-offline", displayName: "Offline company", port: 7802, running: false, current: false, switchUrl: "https://machine.example.ts.net:7802/" },
 ]
 
 function open() {

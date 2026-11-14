@@ -2,7 +2,7 @@
 
 Read against `origin/main` at `60e675d6`, and re-verified at `3c032251` for every row spec.md
 and plan.md cite. The "Departments today", "Claude profiles" and "Remote targets" sections
-were read at `3c032251`. Paths are relative to `packages/jinn/src/` unless
+were read at `3c032251`. Paths are relative to `packages/hundredfold/src/` unless
 they start with `packages/`.
 
 **After the operator's decisions (2026-10-05):**
@@ -108,11 +108,11 @@ and the decision. This reading was matched by content in minified code, so Phase
 | `engines/remote-stage.ts:658` | `verifyClaudeProfile`, which caches only successes (`:639`) | Copied for the local check |
 | `sessions/turn/engine-run.ts:55` | Passes host, user and cwd, but not the profile | A bug: ordinary remote turns and auto-compaction fall back to the instance default. FR-058 |
 | `sessions/rate-limit-handler.ts:104` | Rebuilds the remote target from the employee, profile included | The rate-limit path keeps the profile. `rate-limit-turn.ts:166`'s omission is redundant |
-| `shared/config-types.ts:268` / `:274` | `remoteCwd` must sit under `remote.root`, and the remote `$JINN_HOME` is a link farm over the gateway's real knowledge, docs, org and skills | A scoped remote session gets a home with no farm links, and a stage dir under `remote.root` (FR-060, FR-062) |
+| `shared/config-types.ts:268` / `:274` | `remoteCwd` must sit under `remote.root`, and the remote `$HUNDREDFOLD_HOME` is a link farm over the gateway's real knowledge, docs, org and skills | A scoped remote session gets a home with no farm links, and a stage dir under `remote.root` (FR-060, FR-062) |
 | `engines/remote-stage.ts:966` | `FARM_SCRIPT`: links every top-level entry of the mount into the session home, and links the company `CLAUDE.md` into `remoteCwd` when it is not a git tree | Left untouched. Scoped sessions run a scoped variant (FR-062) |
 | `engines/remote-stage.ts:792` / `:167` | `serializePerHost`, and `stageRemoteFile` (temp file, then rename) | The stage-dir push runs inside the first and follows the second's discipline (FR-060) |
 | `engines/remote-stage.ts:1248` | `prepareRemoteSession`: farm, assets and trust seed under the per-host lock, then the session's own files | Gains an optional department (Phase 5) |
-| `mcp/file-tools.ts:98`, `mcp/work-item-attachments.ts:103` | `publish_attachment` and path-based `attach_to_work_item` read the file in the jinn MCP server and upload the bytes; neither uses the JSON `{path}` route. For a remote session that server runs on the remote host (its config is remapped to the remote install, `engines/remote-stage.ts:1398`) | FR-018 and FR-065 check the path limit in both tools |
+| `mcp/file-tools.ts:98`, `mcp/work-item-attachments.ts:103` | `publish_attachment` and path-based `attach_to_work_item` read the file in the hundredfold MCP server and upload the bytes; neither uses the JSON `{path}` route. For a remote session that server runs on the remote host (its config is remapped to the remote install, `engines/remote-stage.ts:1398`) | FR-018 and FR-065 check the path limit in both tools |
 | `shared/remote-target.ts:207` | `employeeRemoteTarget`, called by `pty-ws.ts:134`, `turn/remote-ready.ts:76`, `session-file-read.ts:67` and `cli/remote.ts:58`; `engine-run.ts:55` builds its target inline | FR-061 puts the scoped cwd override in this one helper |
 | `shared/remote-target.ts:156` | `remote.root` and `remote.mount` are each checked to be absolute; nothing stops the mount sitting under the root | FR-061 refuses a scoped `remoteCwd` over the mount |
 | `engines/remote-stage.ts:418`, `:912`, `:936` | The per-host stage root holds every session's `gateway.json`; the trust key includes the cwd; the trust seed runs `mkdir -p <cwd>` | FR-061 spawn-time check; FR-020a keeps the cwd stable; the sync runs before the seed |
@@ -130,9 +130,9 @@ and the decision. This reading was matched by content in minified code, so Phase
 | `gateway/request-handler.ts:55` | With `authRequired`, a request without the bearer token gets 401 before any route, except the exempt set |
 | `gateway/auth.ts:250` | `authRequiredForRequest` exempts `/api/status`, `GET /api/auth/state`, the `POST` auth and pairing routes, and `POST /api/internal/hook` | E15 walks these |
 | `gateway/server.ts:1035` | Upgrades: `/ws` and plugin events refuse unidentified callers, then check auth. Only `/ws/pty` is operator-only | A token-holding session receives the company broadcast today |
-| `mcp/identity.ts:207` | Each jinn MCP server gets `JINN_SESSION_CAPABILITY` in its environment | Visible to `ps -E` from any same-user process. Seen on this host in 6 of 6 running MCP servers |
-| `gateway/server.ts:510` | `process.env.JINN_GATEWAY_TOKEN` is set in the gateway and inherited by every engine | Visible to `ps -E`. Seen on this host in 148 processes |
-| `packages/jinn/assets/hook-relay.mjs:10` | The hook relay resolves its home from `JINN_HOME` or `~/.jinn` | FR-025a | This instance runs `authRequired: true`. Deferred, not built: a contained shell would stop here |
+| `mcp/identity.ts:207` | Each hundredfold MCP server gets `HUNDREDFOLD_SESSION_CAPABILITY` in its environment | Visible to `ps -E` from any same-user process. Seen on this host in 6 of 6 running MCP servers |
+| `gateway/server.ts:510` | `process.env.HUNDREDFOLD_GATEWAY_TOKEN` is set in the gateway and inherited by every engine | Visible to `ps -E`. Seen on this host in 148 processes |
+| `packages/hundredfold/assets/hook-relay.mjs:10` | The hook relay resolves its home from `HUNDREDFOLD_HOME` or `~/.hundredfold` | FR-025a | This instance runs `authRequired: true`. Deferred, not built: a contained shell would stop here |
 | `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: auth is off on loopback unless `gateway.authRequired` is set | Deferred to the sandbox work |
 | `gateway/api.ts:841` | `rejectUnverifiedIdentifiedApiCaller` lets unauthenticated `GET`s through when auth is off | Affects auth-off instances only |
 | `gateway/api.ts:796` | Same-origin browser inference, purely from headers | On an auth-off instance any local `curl` can forge it. Deferred to the sandbox work |
@@ -191,13 +191,13 @@ and the decision. This reading was matched by content in minified code, so Phase
 
 | `path:line` | What it is | Bearing |
 | --- | --- | --- |
-| `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: JINN_HOME` | FR-020: scoped sessions get the stage dir |
-| `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | Deferred to the sandbox work |
-| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | Built for local scoped sessions (`scopedSession`, `isScopedSessionEnvName`), keeping `JINN_GATEWAY_TOKEN`; the allow-list without it is deferred to the sandbox work. It stops inheritance only: as the gateway's user the session can still read `/proc/<gateway pid>/environ` |
+| `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: HUNDREDFOLD_HOME` | FR-020: scoped sessions get the stage dir |
+| `gateway/server.ts:504` | Exports `HUNDREDFOLD_GATEWAY_TOKEN` to every engine | Deferred to the sandbox work |
+| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | Built for local scoped sessions (`scopedSession`, `isScopedSessionEnvName`), keeping `HUNDREDFOLD_GATEWAY_TOKEN`; the allow-list without it is deferred to the sandbox work. It stops inheritance only: as the gateway's user the session can still read `/proc/<gateway pid>/environ` |
 | `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:451`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | Deferred to the sandbox work |
 | `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Deferred, not built: sandbox and deny blocks |
 | `board-walk/route-turn.ts:48` | `CLAUDE_WALK_FLAGS`: `--no-chrome --tools "" --strict-mcp-config` | The only existing locked-down Claude turn |
-| `gateway/watcher.ts:38` | `syncSkillSymlinks` links every skill into `~/.jinn/.claude/skills` | The stage dir gets copies of the allowed skills instead |
+| `gateway/watcher.ts:38` | `syncSkillSymlinks` links every skill into `~/.hundredfold/.claude/skills` | The stage dir gets copies of the allowed skills instead |
 | `work-items/dispatch-config.ts:253` | `resolveTodoDispatch` adds skills as prompt lines | FR-027 validates them against the allow-list |
 | `sessions/context.ts:198` | `buildContext` | The department section comes from a new module |
 | `sessions/context.ts:298` | Working roster | Filtered to members |
@@ -226,7 +226,7 @@ Read at `origin/main` 70419b04.
 | `shared/engine-health-store.ts:45` | One health record per engine; quota records carry no host | Per account (FR-055) |
 | `engines/remote-stage.ts:1378` | Remote sessions write no status-line snapshot to the gateway | The gateway reads remote accounts itself over SSH (FR-072) |
 | `board-walk/snapshot.ts:14`, `:224`, `:238` | No numeric thresholds in code; one Claude five-hour window; an unscoped exhausted flag | Per-account snapshot (FR-075) |
-| `packages/jinn/template/board-walk.md:98` | The thresholds, "hold, never guess", concurrency and "one start per tick" are prose about one Claude pool | Rewritten per account; the instance copy is the operator's (FR-077) |
+| `packages/hundredfold/template/board-walk.md:98` | The thresholds, "hold, never guess", concurrency and "one start per tick" are prose about one Claude pool | Rewritten per account; the instance copy is the operator's (FR-077) |
 | `board-walk/apply.ts:245` | `startTodo` checks only the switch, the status and the opt-out | Gains the exhausted-account gate (FR-075) |
 | `board-walk/walk.ts:142` | `dispatcherSuffix` passes a preferred engine to the Dispatcher as advice | Also lists exhausted accounts |
 | `board-walk/route-turn.ts:85` | The walk skips the tick when its runner engine is exhausted | FR-076 |
@@ -298,7 +298,7 @@ to an over-budget file is paid for in the same PR by moving existing code out.
   uses.
 - **A profile owner marker** (`claudeProfileOwner`, the FR-059 option (b) in an earlier
   draft). The operator owns every profile, and the system does not track ownership (D4).
-- **A stage dir inside `$JINN_HOME`.** Ancestor `CLAUDE.md` loading would pull in the company
+- **A stage dir inside `$HUNDREDFOLD_HOME`.** Ancestor `CLAUDE.md` loading would pull in the company
   file. Symlinked skills would resolve into the denied tree. A deny on the home would cover
   the stage dir too, because deny wins over allow.
 
@@ -312,7 +312,7 @@ argv and its gateway-written `--settings`. Reading documentation does not count.
 record the setting or flag that achieves it, or record that nothing does.
 
 1. **Deny rules under bypass.** With `--dangerously-skip-permissions`, are `permissions.deny`
-   rules for Read and Edit under `$JINN_HOME` still enforced? If not, scoped sessions drop
+   rules for Read and Edit under `$HUNDREDFOLD_HOME` still enforced? If not, scoped sessions drop
    that flag for a mode that does enforce denies.
 2. **No unsandboxed escape.** Can the Bash tool's `dangerouslyDisableSandbox` be closed
    (`sandbox.allowUnsandboxedCommands: false`) while permissions are bypassed? (E5)
@@ -327,16 +327,16 @@ record the setting or flag that achieves it, or record that nothing does.
    the minimal environment plus secret references? Which extra read paths do they need, for
    example `~/.gitconfig`, `~/.ssh`, `~/.config/gh`, the pnpm store, or the Playwright
    browsers?
-6. **Ancestor files.** From a stage dir outside `$JINN_HOME`, which ancestor `CLAUDE.md` and
+6. **Ancestor files.** From a stage dir outside `$HUNDREDFOLD_HOME`, which ancestor `CLAUDE.md` and
    `AGENTS.md` load? On this host neither `~/CLAUDE.md` nor `~/AGENTS.md` exists.
-7. **The jinn MCP server keeps working.** It is a child of `claude` and runs outside the Bash
+7. **The hundredfold MCP server keeps working.** It is a child of `claude` and runs outside the Bash
    sandbox. Does it start from the stage dir with the capability passed on its environment,
    and authenticate through `gateway.json`, while the shell cannot read that file? (E3, E4, E8)
 8. **Sub-agents and hooks.** Are Task sub-agents and gateway hooks inside the same sandbox?
    Task sub-agents inherit the parent's identity
    (`mcp/__tests__/tool-manifest-budget.test.ts:205`), so they must inherit its sandbox too.
 9. **Reads made outside the sandbox.** With FR-018 in place, do `publish_attachment` and
-   `attach_to_work_item` refuse paths under `$JINN_HOME`? (E7)
+   `attach_to_work_item` refuse paths under `$HUNDREDFOLD_HOME`? (E7)
 10. **Process inspection.** Can the sandbox stop `ps -E` and other ways of reading another
     process's environment (`sysctl KERN_PROCARGS2`, `proc_pidinfo`)? (E14) If it cannot,
     every token and capability in a same-user process environment stays readable, and B is

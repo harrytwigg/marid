@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship focused workflow, Todo, and delegation playbooks so every fresh Jinn install can operate the platform's core company surfaces.
+**Goal:** Ship focused workflow, Todo, and delegation playbooks so every fresh Hundredfold install can operate the platform's core company surfaces.
 
-**Architecture:** Add the playbooks under the existing `packages/jinn/template/skills/` seed tree, which `jinn setup` already copies recursively and the gateway skill watcher already mirrors into Claude and Codex discovery directories. Extend the template doctrine test to enforce discoverable frontmatter, setup wiring, MCP-first instructions, and exact current tool/CLI terminology.
+**Architecture:** Add the playbooks under the existing `packages/hundredfold/template/skills/` seed tree, which `hundredfold setup` already copies recursively and the gateway skill watcher already mirrors into Claude and Codex discovery directories. Extend the template doctrine test to enforce discoverable frontmatter, setup wiring, MCP-first instructions, and exact current tool/CLI terminology.
 
 **Tech Stack:** Markdown skill playbooks, YAML frontmatter, TypeScript, Vitest, pnpm.
 
 ## Global Constraints
 
-- Work only in `/private/tmp/jinn-skills` and never touch ports 7777/7788 or `~/.jinn`.
+- Work only in `/private/tmp/hundredfold-skills` and never touch ports 7777/7788 or `~/.hundredfold`.
 - Keep all shipped content generic; no personal names, projects, emails, IDs, keys, or absolute home-directory paths.
 - Use canonical kebab-case workflow names and current MCP/CLI contracts.
 - Do not add `Co-Authored-By` trailers.
@@ -20,11 +20,11 @@
 ### Task 1: Lock the fresh-install skill contract
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Test: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
 
 **Interfaces:**
-- Consumes: `packages/jinn/template/skills/<name>/SKILL.md` and `copyTemplateDir(template/skills, SKILLS_DIR, ...)`.
+- Consumes: `packages/hundredfold/template/skills/<name>/SKILL.md` and `copyTemplateDir(template/skills, SKILLS_DIR, ...)`.
 - Produces: regression coverage for the `workflow`, `todo-handling`, and `delegation` shipped skills.
 
 - [ ] **Step 1: Write the failing test**
@@ -33,7 +33,7 @@ Add a test that expects all three files, parses their `name` and `description` f
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the three template skills do not exist yet.
 
@@ -44,12 +44,12 @@ Stage this test together with the playbooks after all checks pass.
 ### Task 2: Author the default company-surface playbooks
 
 **Files:**
-- Create: `packages/jinn/template/skills/workflow/SKILL.md`
-- Create: `packages/jinn/template/skills/todo-handling/SKILL.md`
-- Create: `packages/jinn/template/skills/delegation/SKILL.md`
+- Create: `packages/hundredfold/template/skills/workflow/SKILL.md`
+- Create: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
+- Create: `packages/hundredfold/template/skills/delegation/SKILL.md`
 
 **Interfaces:**
-- Consumes: workflow tools from `src/mcp/workflow-tools.ts`, Todo tools from `src/mcp/work-item-tools.ts`, delegation/session/org tools, and `jinn workflow run <name>` from `src/cli/workflow.ts`.
+- Consumes: workflow tools from `src/mcp/workflow-tools.ts`, Todo tools from `src/mcp/work-item-tools.ts`, delegation/session/org tools, and `hundredfold workflow run <name>` from `src/cli/workflow.ts`.
 - Produces: skill packages discovered as `workflow`, `todo-handling`, and `delegation`.
 
 - [ ] **Step 1: Write minimal workflow instructions**
@@ -66,7 +66,7 @@ Document roster-first selection, tracked `delegate_task` versus untracked `spawn
 
 - [ ] **Step 4: Run the focused test to verify it passes**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: PASS.
 
@@ -97,4 +97,4 @@ Commit with a focused message, fast-forward the primary worktree's `main` branch
 
 - [ ] **Step 5: Remove the worktree**
 
-Remove `/private/tmp/jinn-skills` after capturing the commit SHA and verification output tails.
+Remove `/private/tmp/hundredfold-skills` after capturing the commit SHA and verification output tails.

@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import { LEGACY } from "./legacy-names.mjs"
 import fs from "node:fs"
 import net from "node:net"
 import os from "node:os"
@@ -6,10 +7,24 @@ import path from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 import { signalGatewayGroup, stopGatewayGroup } from "./upgrade-verify-process-group.mjs"
 
-export const NONCE_FILE = ".jinn-upgrade-verify-nonce"
+export const NONCE_FILE = ".hundredfold-upgrade-verify-nonce"
 export const PROTECTED_PORTS = new Set([7777, 7801])
 const STRICT_VERSION = /^\d+\.\d+\.\d+$/
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+
+// The binary an installed package carries: `hundredfold.js`, or the old name in a release from before the rename.
+const installedCli = (packageRoot) =>
+  ["hundredfold.js", `${LEGACY.codename}.js`].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file)) ??
+  path.join(packageRoot, "dist", "bin", "hundredfold.js")
+
+// The published package a candidate is measured against: the last release before the rename, which is what an install
+// being upgraded is running. Switch to the new name once it has a release of its own.
+export const BASELINE_PACKAGE = LEGACY.package
+
+// Where a global install put the package: under the new name, or under the old one for the baseline.
+const installedPackageRoot = (prefix) =>
+  ["hundredfold", BASELINE_PACKAGE].map((name) => path.join(prefix, "lib", "node_modules", name)).find((dir) => fs.existsSync(dir)) ??
+  path.join(prefix, "lib", "node_modules", "hundredfold")
 
 export function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex")
@@ -25,7 +40,7 @@ export function run(command, args, options = {}) {
 }
 
 export function createDisposableRoot() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-upgrade-verify-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-upgrade-verify-"))
   fs.writeFileSync(path.join(root, NONCE_FILE), `${crypto.randomUUID()}\n`, { mode: 0o600 })
   return fs.realpathSync(root)
 }
@@ -75,7 +90,7 @@ export async function assertPortAvailable(port) {
 
 export function buildEnvironment(root, scenario, port) {
   const scenarioRoot = path.join(root, scenario)
-  const home = path.join(scenarioRoot, "home", ".jinn-verify")
+  const home = path.join(scenarioRoot, "home", ".hundredfold-verify")
   const osHome = path.join(scenarioRoot, "home")
   const prefix = path.join(scenarioRoot, "prefix")
   for (const dir of [home, prefix, path.join(scenarioRoot, "cache"), path.join(scenarioRoot, "logs")]) {
@@ -84,12 +99,12 @@ export function buildEnvironment(root, scenario, port) {
   const env = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: osHome,
-    JINN_HOME: home,
-    JINN_INSTANCE: `upgrade-verify-${scenario}`,
-    JINN_INSTANCES_REGISTRY: path.join(scenarioRoot, "instances.json"),
-    JINN_REGISTRY_PATH: path.join(scenarioRoot, "instances.json"),
-    JINN_LOG_DIR: path.join(scenarioRoot, "logs"),
-    JINN_ATTACHMENTS_DIR: path.join(scenarioRoot, "attachments"),
+    HUNDREDFOLD_HOME: home,
+    HUNDREDFOLD_INSTANCE: `upgrade-verify-${scenario}`,
+    HUNDREDFOLD_INSTANCES_REGISTRY: path.join(scenarioRoot, "instances.json"),
+    HUNDREDFOLD_REGISTRY_PATH: path.join(scenarioRoot, "instances.json"),
+    HUNDREDFOLD_LOG_DIR: path.join(scenarioRoot, "logs"),
+    HUNDREDFOLD_ATTACHMENTS_DIR: path.join(scenarioRoot, "attachments"),
     XDG_CONFIG_HOME: path.join(scenarioRoot, "xdg", "config"),
     XDG_CACHE_HOME: path.join(scenarioRoot, "xdg", "cache"),
     XDG_DATA_HOME: path.join(scenarioRoot, "xdg", "data"),
@@ -98,8 +113,8 @@ export function buildEnvironment(root, scenario, port) {
     npm_config_ignore_scripts: "false",
     npm_config_audit: "false",
     npm_config_fund: "false",
-    JINN_NO_OPEN: "1",
-    JINN_PORT: String(port),
+    HUNDREDFOLD_NO_OPEN: "1",
+    HUNDREDFOLD_PORT: String(port),
     CI: "1",
     NO_COLOR: "1",
     TERM: "dumb",
@@ -108,12 +123,12 @@ export function buildEnvironment(root, scenario, port) {
 }
 
 export function latestPublishedTarball(root, env) {
-  const version = run("npm", ["view", "jinn-cli", "version"], { env })
+  const version = run("npm", ["view", BASELINE_PACKAGE, "version"], { env })
   if (!STRICT_VERSION.test(version)) throw new Error(`npm did not report a plain published latest version: ${version}`)
   const destination = path.join(root, "published")
   fs.mkdirSync(destination)
-  run("npm", ["pack", `jinn-cli@${version}`, "--pack-destination", destination], { env })
-  const tarball = path.join(destination, `jinn-cli-${version}.tgz`)
+  run("npm", ["pack", `${BASELINE_PACKAGE}@${version}`, "--pack-destination", destination], { env })
+  const tarball = path.join(destination, `${BASELINE_PACKAGE}-${version}.tgz`)
   if (!fs.existsSync(tarball)) throw new Error(`npm did not produce the published latest tarball for ${version}`)
   return { version, tarball }
 }
@@ -125,8 +140,8 @@ export function installTarball(tarball, prefix, env) {
   run("npm", ["install", "--global", "--prefix", prefix, "--ignore-scripts=false", "--no-audit", "--no-fund", tarball], {
     env: { ...env, npm_config_prefix: prefix },
   })
-  const packageRoot = path.join(prefix, "lib", "node_modules", "jinn-cli")
-  const cli = path.join(packageRoot, "dist", "bin", "jinn.js")
+  const packageRoot = installedPackageRoot(prefix)
+  const cli = installedCli(packageRoot)
   if (!fs.existsSync(cli)) throw new Error(`installed package has no CLI: ${cli}`)
   const version = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")).version
   if (!STRICT_VERSION.test(version)) throw new Error(`installed package has an invalid version: ${String(version)}`)
@@ -162,9 +177,9 @@ function expectedTemplateBytes(file, portalName) {
 
 function instancePortalName(home) {
   const config = path.join(home, "config.yaml")
-  if (!fs.existsSync(config)) return "Jinn" // rename:keep
+  if (!fs.existsSync(config)) return LEGACY.portalName
   const match = /^\s+portalName:\s*["']?([^"'\n]+?)["']?\s*$/m.exec(fs.readFileSync(config, "utf8"))
-  return match?.[1] ?? "Jinn" // rename:keep
+  return match?.[1] ?? LEGACY.portalName
 }
 
 export function assertShippedSkillsConverged(home, candidateRoot, candidateSkills) {
@@ -187,7 +202,7 @@ export function assertShippedSkillsConverged(home, candidateRoot, candidateSkill
 
 export function hashUpgradeSurface(home) {
   const result = {}
-  for (const relative of ["skills", ".jinn-template-skills.json", "config.yaml", ".migration-backups"]) {
+  for (const relative of ["skills", ".hundredfold-template-skills.json", "config.yaml", ".migration-backups"]) {
     const absolute = path.join(home, relative)
     if (!fs.existsSync(absolute)) continue
     if (fs.statSync(absolute).isDirectory()) {

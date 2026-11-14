@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Keep the relationship-scoped roster and built-in Jinn MCP tool belt.
+- Keep the relationship-scoped roster and built-in Hundredfold MCP tool belt.
 - Do not change employee role, engine, rank, department, or reporting relationships except removing invalid virtual-root references.
 - Keep repository content generic; personal employee edits belong only in the live workspace.
 - Do not restart or touch gateway processes.
@@ -20,8 +20,8 @@
 ### Task 1: Enforce `context.maxChars`
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts`
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts`
+- Modify: `packages/hundredfold/src/sessions/context.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts`
 
 - [ ] Strengthen the existing cap test with an oversized persona and an exact `length <= maxChars` assertion.
 - [ ] Run the focused test and confirm it fails because the current result exceeds the cap.
@@ -31,8 +31,8 @@
 ### Task 2: Reduce composed bootstrap noise
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts`
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts`
+- Modify: `packages/hundredfold/src/sessions/context.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts`
 
 - [ ] Add assertions that local discovery no longer lists directory contents or project names and employee identity is not repeated in the company block.
 - [ ] Run focused tests and confirm the new assertions fail.
@@ -43,7 +43,7 @@
 
 **Files:**
 - Modify: selected live `org/**/*.yaml` files identified by the context audit.
-- Review: `packages/jinn/template/org/**/*.yaml`
+- Review: `packages/hundredfold/template/org/**/*.yaml`
 
 - [ ] Remove stale stacks, dead paths, stripped CLI flags, unavailable-tool references, raw local delegation recipes, board references, and repeated procedures.
 - [ ] Reduce oversized personas to stable role, constraints, skill routing, and reporting expectations.

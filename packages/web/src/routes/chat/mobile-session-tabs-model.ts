@@ -6,7 +6,7 @@
  * keeps its place while it is focused, and only leaves when it is closed.
  */
 
-export const MOBILE_TABS_STORAGE_KEY = 'jinn-mobile-session-tabs'
+export const MOBILE_TABS_STORAGE_KEY = 'hundredfold-mobile-session-tabs'
 
 /** Every tab costs a last-message fetch for its updated dot, so the list stays short. */
 export const MOBILE_TABS_LIMIT = 8

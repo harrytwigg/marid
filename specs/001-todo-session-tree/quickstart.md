@@ -29,7 +29,7 @@ node scripts/ratchet.mjs
 ```
 
 **This is red on the branch before you start** — 24 pre-existing violations, including
-`packages/jinn/src/gateway/api.ts` (5186 lines against a 5114 baseline). Do not read a red
+`packages/hundredfold/src/gateway/api.ts` (5186 lines against a 5114 baseline). Do not read a red
 ratchet as permission. Compare the violation list before and after your change: the files this
 feature touches must not appear as *new* entries, and these three have no room at all —
 
@@ -45,8 +45,8 @@ New behaviour goes in new modules; new tests go in new `__tests__` files.
 ## Targeted suites
 
 ```bash
-pnpm --filter @jinn/web test
-pnpm --filter jinn test
+pnpm --filter @hundredfold/web test
+pnpm --filter hundredfold test
 ```
 
 ## Manual validation — build a real tree
@@ -60,13 +60,13 @@ With an instance running:
    creator as a named, clickable reference — **no `session:<uuid>` text anywhere on the page**
    (SC-002).
 3. **US2 — fan out.** From the dispatcher session, delegate to two employees (`delegate_task`,
-   `packages/jinn/src/mcp/delegation-tools.ts:95`). Return to the Todo **without reloading**:
+   `packages/hundredfold/src/mcp/delegation-tools.ts:95`). Return to the Todo **without reloading**:
    both children must have appeared beneath their parent, each naming its employee, its state,
    and the Todo it minted (FR-009, SC-006).
 4. **Depth.** From one child, delegate again. The grandchild appears under *its* parent, not
    flattened to the root.
 5. **US3 — review.** Move the Todo to `in_review`, then delegate onto it. Per
-   `resolveDelegationLinkRole` (`packages/jinn/src/work-items/link-role.ts:51`) the link role is
+   `resolveDelegationLinkRole` (`packages/hundredfold/src/work-items/link-role.ts:51`) the link role is
    inferred as `review`; the new node must be visibly distinguishable from the execution
    attempts (FR-006, SC-004).
 6. **Finished work stays.** Let a child session finish. Its node remains and stays clickable

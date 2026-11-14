@@ -10,7 +10,7 @@ verified on this branch.
 
 ## 1. Existing infrastructure
 
-Six places decide whether Jinn can host a plugin at all, and today every one of them is
+Six places decide whether Hundredfold can host a plugin at all, and today every one of them is
 closed by a literal: a fixed interface, a hardcoded `switch`, a static array, a single-entry
 `Map`. That is the finding. Nothing here needs to be invented from scratch; it needs to be
 opened, and the table records exactly where.
@@ -19,20 +19,20 @@ opened, and the table records exactly where.
 
 | `path:line` | What it is | Why it matters here |
 | --- | --- | --- |
-| `packages/jinn/src/mcp/resolver.ts:113` | `buildAvailableServers(config, attachJinn)`, the built-in plus custom server map | The closest thing to a registry the repo has. A plugin registry should rhyme with it, not diverge for its own sake. |
-| `packages/jinn/src/mcp/resolver.ts:175` | The `config.custom` loop | The config-driven install precedent: a user names a thing in `config.yaml` and the gateway resolves it at startup. |
-| `packages/jinn/src/mcp/resolver.ts:183` | Reserved-name guard: a custom server named `jinn` is refused with a warning | Namespace-collision prior art. Plugin ids need the same treatment, and for the same reason: a caller that trusts a well-known id must not be reachable by a user-supplied one. |
-| `packages/jinn/src/mcp/resolver.ts:219` | `wrapServersWithScrub(servers)`, strips `JINN_GATEWAY_TOKEN` out of third-party subprocess env | Any process a plugin causes to be spawned flows through this. §9 keeps it. |
-| `packages/jinn/src/gateway/watcher.ts:28` | `syncSkillSymlinks()` | The "install by dropping a directory in the instance home" precedent, already shipped and already understood by users. Plugins copy the shape. |
-| `packages/jinn/src/gateway/watcher.ts:78` | `startWatchers(callbacks)`, chokidar with `awaitWriteFinish` | The watch mechanics to reuse verbatim. |
-| `packages/jinn/src/gateway/watcher.ts:79` | `const DEBOUNCE_MS = 500` | The debounce interval plugin discovery inherits, so a multi-file save is one rescan. |
-| `packages/jinn/src/shared/types.ts:268` | `interface Connector`, with `start()` `:272`, `stop()` `:273`, `getHealth()` `:275`, and `id` documented at `:270` as "the connector's registry key" | The repo's de facto supervised-component contract: lifecycle, health, typed registry key, no base class. §7 mirrors it rather than inventing a second lifecycle vocabulary. |
-| `packages/jinn/src/gateway/server.ts:449` | `reloadConnectorRegistry`, stop-all then re-init | The hot-reload shape a plugin backend registry follows. |
-| `packages/jinn/src/gateway/api.ts:326` | `connectors: Map<string, Connector>` on `ApiContext` | A runtime-mutable, hot-reloadable registry already living on the server. Server-side prior art that a plugin registry is not a new category. |
-| `packages/jinn/src/gateway/route-helpers.ts:14` | The documented contract: `handle<Domain>Api(req, res, route, context) => Promise<boolean>`, `true` means consumed | The contract a plugin router must satisfy to be a normal citizen of the dispatch chain. |
-| `packages/jinn/src/gateway/api.ts:5611` | `handleCronApi(req, res, { method, pathname, url }, context)` | The uniform four-argument form of that contract, as opposed to the bespoke option bags at `:2196` and `:2198`. A plugin router uses this form. |
-| `packages/jinn/src/gateway/auth.ts:264` | `if (pathname.startsWith("/api/")) return true` | Everything under `/api/` requires auth by default. This is why the plugin namespace is `/api/plugins/`, and it is load-bearing for §6 and §9. |
-| `packages/jinn/src/gateway/server.ts:1098` | The gateway auth gate, `authRequiredNow() && authRequiredForRequest(...)` then 401 | Runs before `handleApiRequest` at `:1109`. Any gate mounted inside the dispatch chain is therefore downstream of auth by construction, which is exactly what §9 requires. |
+| `packages/hundredfold/src/mcp/resolver.ts:113` | `buildAvailableServers(config, attachHundredfold)`, the built-in plus custom server map | The closest thing to a registry the repo has. A plugin registry should rhyme with it, not diverge for its own sake. |
+| `packages/hundredfold/src/mcp/resolver.ts:175` | The `config.custom` loop | The config-driven install precedent: a user names a thing in `config.yaml` and the gateway resolves it at startup. |
+| `packages/hundredfold/src/mcp/resolver.ts:183` | Reserved-name guard: a custom server named `hundredfold` is refused with a warning | Namespace-collision prior art. Plugin ids need the same treatment, and for the same reason: a caller that trusts a well-known id must not be reachable by a user-supplied one. |
+| `packages/hundredfold/src/mcp/resolver.ts:219` | `wrapServersWithScrub(servers)`, strips `HUNDREDFOLD_GATEWAY_TOKEN` out of third-party subprocess env | Any process a plugin causes to be spawned flows through this. §9 keeps it. |
+| `packages/hundredfold/src/gateway/watcher.ts:28` | `syncSkillSymlinks()` | The "install by dropping a directory in the instance home" precedent, already shipped and already understood by users. Plugins copy the shape. |
+| `packages/hundredfold/src/gateway/watcher.ts:78` | `startWatchers(callbacks)`, chokidar with `awaitWriteFinish` | The watch mechanics to reuse verbatim. |
+| `packages/hundredfold/src/gateway/watcher.ts:79` | `const DEBOUNCE_MS = 500` | The debounce interval plugin discovery inherits, so a multi-file save is one rescan. |
+| `packages/hundredfold/src/shared/types.ts:268` | `interface Connector`, with `start()` `:272`, `stop()` `:273`, `getHealth()` `:275`, and `id` documented at `:270` as "the connector's registry key" | The repo's de facto supervised-component contract: lifecycle, health, typed registry key, no base class. §7 mirrors it rather than inventing a second lifecycle vocabulary. |
+| `packages/hundredfold/src/gateway/server.ts:449` | `reloadConnectorRegistry`, stop-all then re-init | The hot-reload shape a plugin backend registry follows. |
+| `packages/hundredfold/src/gateway/api.ts:326` | `connectors: Map<string, Connector>` on `ApiContext` | A runtime-mutable, hot-reloadable registry already living on the server. Server-side prior art that a plugin registry is not a new category. |
+| `packages/hundredfold/src/gateway/route-helpers.ts:14` | The documented contract: `handle<Domain>Api(req, res, route, context) => Promise<boolean>`, `true` means consumed | The contract a plugin router must satisfy to be a normal citizen of the dispatch chain. |
+| `packages/hundredfold/src/gateway/api.ts:5611` | `handleCronApi(req, res, { method, pathname, url }, context)` | The uniform four-argument form of that contract, as opposed to the bespoke option bags at `:2196` and `:2198`. A plugin router uses this form. |
+| `packages/hundredfold/src/gateway/auth.ts:264` | `if (pathname.startsWith("/api/")) return true` | Everything under `/api/` requires auth by default. This is why the plugin namespace is `/api/plugins/`, and it is load-bearing for §6 and §9. |
+| `packages/hundredfold/src/gateway/server.ts:1098` | The gateway auth gate, `authRequiredNow() && authRequiredForRequest(...)` then 401 | Runs before `handleApiRequest` at `:1109`. Any gate mounted inside the dispatch chain is therefore downstream of auth by construction, which is exactly what §9 requires. |
 | `packages/web/src/lib/route-prefetch.ts:3` | `registerRoutePrefetch(href, prefetch)`, writing a module-scope `Map` declared at `:1` | The only runtime-mutable registry in the web app with a `register*` writer, other than the single-slot Talk navigator handle at `packages/web/src/components/talk/tools/router-handle.ts:17`. Precedent that a mutable registry is an accepted pattern here, and a warning: it has no removal API, which a contribution registry cannot copy. |
 | `packages/web/src/lib/nav.ts:49` | `navigationFor(notesEnabled)`, the single source for desktop, mobile, and overflow nav | `sidebar.nav` contributions merge through this function. Forking it would produce two navs that drift. |
 | `packages/web/src/routes/todos/task-page/banner.tsx:90` | `actions?: React.ReactNode`, documented at `:89`, rendered at `:288`, filled from `task-page.tsx:428` | An existing page-scoped header-action slot with a `ReactNode` contract. §3's page-scoped pair generalizes this one rather than inventing a slot with no precedent. |
@@ -44,13 +44,13 @@ and is not, and the next reader would otherwise spend the same hour discovering 
 
 | `path:line` | What it is | Why it is rejected |
 | --- | --- | --- |
-| `packages/jinn/src/mcp/resolver.ts:175` | `mcp.custom`, rung 4 of the AGENTS.md §2 ladder, the extension point that exists today | **Rejected as the plugin mechanism.** It extends the *agent's* tool surface. It cannot render a page, add a nav row, or own a dashboard route. The target use case (a mailbox watcher with a drafts page and approve/reject actions) is entirely UI plus a supervised background task, and `mcp.custom` addresses neither. It remains correct for what it does and §10 keeps it. |
-| `packages/jinn/src/mcp/resolver.ts:177` | `if (serverConfig.enabled === false) continue` | **Rejected as the enable semantics.** Absence means enabled here. For plugins that is the wrong default: a folder appearing in the instance home must not start executing code because nobody has said no yet. §8 inverts it. |
-| `packages/jinn/src/gateway/hook-registry.ts:19` | `listeners = new Map<string, HookListener>()`, one listener per session | **Rejected as the plugin event bus.** `register()` at `:43` warns and then overwrites at `:52`, and hands the buffered payloads to the newcomer at `:61`. A plugin subscribing to a session would evict the engine's turn listener and steal its buffered `Stop` hook, so the turn would never resolve. §7 gives plugins their own bounded channel instead. |
-| `packages/jinn/src/gateway/watcher.ts:7` | `interface WatcherCallbacks`, exactly four fixed hooks (`:8` to `:11`) | **Rejected as the watch registration shape.** Adding a target means editing this interface and every caller, which is the opposite of installable. The chokidar mechanics at `:78` are reused; the callback struct is not. |
-| `packages/jinn/src/gateway/watcher.ts:17` | `let timer` captured inside the `debounce` closure | **Rejected as the debounce helper for plugin watchers.** `stopWatchers()` at `:135` closes the chokidar watchers and clears the array, and that is all it can do: the timer handle is unreachable from outside the closure, so a change landing within 500 ms of shutdown still fires afterwards and keeps the event loop alive. A supervised lifecycle (§7) needs a cancel path, so the plugin debounce returns a handle with `cancel()`. |
-| `packages/jinn/src/gateway/server.ts:419` | `createConnector`, a hardcoded `switch` on type that throws on unknown | **Rejected as the model for plugin backends.** Connectors are a closed enum on purpose, and the comment at `:418` says so ("The only place a connector is constructed"). Plugin backends are open by definition; they load by path, not by name in a `switch`. |
-| `packages/jinn/src/gateway/server.ts:267` | `serveStatic(req, res, webDir, options)` | **Rejected for plugin assets, twice over.** Its containment check at `:282` is `resolved.startsWith(path.resolve(webDir))`, a string prefix rather than a separator-aware boundary, so a sibling directory whose name merely extends `webDir` would pass. And its cache policy at `:293` marks anything under `/assets/` `immutable` for a year, which is correct for Vite's content-addressed output and exactly wrong for a plugin file that hot-reloads under a stable name. §6 serves plugin assets on their own route with `no-store`. Fixing `serveStatic` itself is not this design's business and belongs to the discovery slice if it is done at all. |
+| `packages/hundredfold/src/mcp/resolver.ts:175` | `mcp.custom`, rung 4 of the AGENTS.md §2 ladder, the extension point that exists today | **Rejected as the plugin mechanism.** It extends the *agent's* tool surface. It cannot render a page, add a nav row, or own a dashboard route. The target use case (a mailbox watcher with a drafts page and approve/reject actions) is entirely UI plus a supervised background task, and `mcp.custom` addresses neither. It remains correct for what it does and §10 keeps it. |
+| `packages/hundredfold/src/mcp/resolver.ts:177` | `if (serverConfig.enabled === false) continue` | **Rejected as the enable semantics.** Absence means enabled here. For plugins that is the wrong default: a folder appearing in the instance home must not start executing code because nobody has said no yet. §8 inverts it. |
+| `packages/hundredfold/src/gateway/hook-registry.ts:19` | `listeners = new Map<string, HookListener>()`, one listener per session | **Rejected as the plugin event bus.** `register()` at `:43` warns and then overwrites at `:52`, and hands the buffered payloads to the newcomer at `:61`. A plugin subscribing to a session would evict the engine's turn listener and steal its buffered `Stop` hook, so the turn would never resolve. §7 gives plugins their own bounded channel instead. |
+| `packages/hundredfold/src/gateway/watcher.ts:7` | `interface WatcherCallbacks`, exactly four fixed hooks (`:8` to `:11`) | **Rejected as the watch registration shape.** Adding a target means editing this interface and every caller, which is the opposite of installable. The chokidar mechanics at `:78` are reused; the callback struct is not. |
+| `packages/hundredfold/src/gateway/watcher.ts:17` | `let timer` captured inside the `debounce` closure | **Rejected as the debounce helper for plugin watchers.** `stopWatchers()` at `:135` closes the chokidar watchers and clears the array, and that is all it can do: the timer handle is unreachable from outside the closure, so a change landing within 500 ms of shutdown still fires afterwards and keeps the event loop alive. A supervised lifecycle (§7) needs a cancel path, so the plugin debounce returns a handle with `cancel()`. |
+| `packages/hundredfold/src/gateway/server.ts:419` | `createConnector`, a hardcoded `switch` on type that throws on unknown | **Rejected as the model for plugin backends.** Connectors are a closed enum on purpose, and the comment at `:418` says so ("The only place a connector is constructed"). Plugin backends are open by definition; they load by path, not by name in a `switch`. |
+| `packages/hundredfold/src/gateway/server.ts:267` | `serveStatic(req, res, webDir, options)` | **Rejected for plugin assets, twice over.** Its containment check at `:282` is `resolved.startsWith(path.resolve(webDir))`, a string prefix rather than a separator-aware boundary, so a sibling directory whose name merely extends `webDir` would pass. And its cache policy at `:293` marks anything under `/assets/` `immutable` for a year, which is correct for Vite's content-addressed output and exactly wrong for a plugin file that hot-reloads under a stable name. §6 serves plugin assets on their own route with `no-store`. Fixing `serveStatic` itself is not this design's business and belongs to the discovery slice if it is done at all. |
 | `packages/web/src/main.tsx:106` | `createBrowserRouter([...])`, a static literal array of 27 children closing at `:144` | **Rejected as extensible.** Nothing appends to it after construction; the only conditional entry is the DEV-gated `/redesign` spread at `:141`. §3's `routes` area is what opens it. |
 | `packages/web/src/lib/nav.ts:23` | `BASE_NAV_ITEMS`, a static non-exported literal | **Rejected as the place plugins add nav.** Adding a destination today means editing this literal and, for mobile placement, the `primaryHrefs` literal at `:58`. Both are inside `nav.ts` and neither is reachable from outside the module. |
 | `packages/web/src/components/page-layout.tsx:123` | `PageLayout`, and its `headerActions` prop destructured to `_headerActions` | **Rejected as an existing slot.** The comment at `:115` records that no page supplies one and pages own their actions inline. It is a dead prop, not a seam. |
@@ -64,7 +64,7 @@ A plugin is a directory in the instance home. Nothing is installed, compiled, or
 anywhere else.
 
 ```
-~/.jinn/plugins/<id>/
+~/.hundredfold/plugins/<id>/
   plugin.json      required   manifest
   client.js        required   plain ESM, loaded in the dashboard
   server.js        optional   plain ESM, loaded in the gateway
@@ -73,11 +73,11 @@ anywhere else.
 The folder name is the id. `plugin.json` repeating it is a consistency check, not a second
 source of truth: a manifest whose `id` differs from its folder is a load error naming both,
 not a silent preference for one. This follows the reserved-name precedent at
-`packages/jinn/src/mcp/resolver.ts:183`, and `jinn` is likewise reserved.
+`packages/hundredfold/src/mcp/resolver.ts:183`, and `hundredfold` is likewise reserved.
 
 | Field | Required | Default | Validated at discovery |
 | --- | --- | --- | --- |
-| `id` | yes | | matches folder name, matches `/^[a-z0-9][a-z0-9-]{1,38}$/`, not `jinn` |
+| `id` | yes | | matches folder name, matches `/^[a-z0-9][a-z0-9-]{1,38}$/`, not `hundredfold` |
 | `name` | no | `id` | string |
 | `version` | no | `"0.0.0"` | string |
 | `client` | no | `"client.js"` | relative path, contained, distinct from `server` (§9). The field is optional; the file it names is not — a plugin with no loadable client half is an `error` record. |
@@ -177,7 +177,7 @@ This is the whole of the isolation story, and §9 is blunt about what it does no
 
 ## 4. The SDK import surface
 
-One module, `@jinn/plugin-sdk`, is the only thing a plugin may import. It re-exports:
+One module, `@hundredfold/plugin-sdk`, is the only thing a plugin may import. It re-exports:
 
 - React and the jsx runtime, **the app's instances**. A second React would break hooks, so this
   is not a convenience re-export, it is the mechanism.
@@ -195,7 +195,7 @@ Two delivery modes resolve to the same object:
    drift from what the SDK actually exports.
 
 The loader rejects unsupported bare specifiers **up front, with a named error**, before
-evaluating anything. Only `@jinn/plugin-sdk`, `react`, and `react/jsx-runtime` resolve. The
+evaluating anything. Only `@hundredfold/plugin-sdk`, `react`, and `react/jsx-runtime` resolve. The
 specifier rewrite is anchored to import and export syntax so a matching string literal inside
 the plugin is never touched. A lint fence keeps bundled plugins to the same list, so the two
 modes cannot diverge into "works bundled, fails on disk".
@@ -217,7 +217,7 @@ Plugins do not get raw RPC. **"Upstream" throughout this document is Hermes, and
 citation is a path relative to the Hermes repository root, never to this one.** Hermes exposes
 `host.request(method, params)` and calls it "the plugin's real power"
 (`apps/desktop/src/sdk/index.ts:16`); it is also the reason a permission model there has to be
-retrofitted against an untyped surface. Jinn ships typed verbs from day one:
+retrofitted against an untyped surface. Hundredfold ships typed verbs from day one:
 
 ```
 host.todos.list(query) / .create(input) / .comment(id, body)
@@ -239,8 +239,8 @@ the point, not the policy. This is the one place the design deliberately costs m
 copying upstream, and the reason is that an untyped door cannot be narrowed afterwards without
 breaking every plugin at once.
 
-Note the interaction with `packages/jinn/src/mcp/resolver.ts:219`: anything a plugin causes to
-be spawned still flows through `wrapServersWithScrub`, so `JINN_GATEWAY_TOKEN` does not reach a
+Note the interaction with `packages/hundredfold/src/mcp/resolver.ts:219`: anything a plugin causes to
+be spawned still flows through `wrapServersWithScrub`, so `HUNDREDFOLD_GATEWAY_TOKEN` does not reach a
 third-party subprocess by way of a plugin.
 
 ---
@@ -252,15 +252,15 @@ route registrar that receives `{ id, log, storage, settings }`, where `storage` 
 the plugin and `settings` is its slice of `config.yaml`.
 
 **Mounting.** One `handlePluginsApi(req, res, route, context) => Promise<boolean>` satisfies the
-contract documented at `packages/jinn/src/gateway/route-helpers.ts:14`, in the uniform
-four-argument form used at `packages/jinn/src/gateway/api.ts:5611`. It joins the boolean chain
+contract documented at `packages/hundredfold/src/gateway/route-helpers.ts:14`, in the uniform
+four-argument form used at `packages/hundredfold/src/gateway/api.ts:5611`. It joins the boolean chain
 in `handleApiRequest` as one more link. No new dispatch mechanism, no route table.
 
 **Hot reload.** The registrar is re-imported with a cache-busting query on file change, and the
 previous incarnation's routes are dropped. This is a strict improvement over upstream, where the
 plugin backends are mounted once from module scope at process start
 (`hermes_cli/web_server.py:17315`), so a code change needs a restart and a rescan will not do it.
-Jinn gets it for free by being one language on both sides.
+Hundredfold gets it for free by being one language on both sides.
 
 **Namespacing by construction.** The client-side helper takes a path relative to the plugin's own
 prefix and builds `/api/plugins/<id><suffix>`. A `..` segment in the path (checked on the portion
@@ -287,13 +287,13 @@ allowlist that has to contain `.js` so the client half can load cannot also be t
 withholds a `.js` backend.
 
 This is a correction to the shape the discovery slice's brief currently describes, and the reason is concrete:
-`authRequiredForRequest` (`packages/jinn/src/gateway/auth.ts:251`) returns `true` only for paths
+`authRequiredForRequest` (`packages/hundredfold/src/gateway/auth.ts:251`) returns `true` only for paths
 under `/api/` (`:264`) or `/ws` (`:265`), and `false` otherwise (`:266`). A `/plugin-assets/...`
-route therefore never reaches the auth gate at `packages/jinn/src/gateway/server.ts:1098` and
+route therefore never reaches the auth gate at `packages/hundredfold/src/gateway/server.ts:1098` and
 would be served to anyone who can reach the port. Upstream accepts an asset path that is
 unauthenticated in its default loopback mode, and says why in the route's own docstring: its SPA
 loads plugin code through `<script src>` and `<link href>`, neither of which can attach a header
-(`hermes_cli/web_server.py:17121`). Jinn's loader (§4) `fetch`es the module and imports a blob URL, so it *can*
+(`hermes_cli/web_server.py:17121`). Hundredfold's loader (§4) `fetch`es the module and imports a blob URL, so it *can*
 attach the gateway token, and the namespace that gets auth for free is the one under `/api/`.
 
 The suffix allowlist in §9 stays regardless. Auth and the allowlist answer different questions:
@@ -302,7 +302,7 @@ auth decides who may ask, the allowlist decides what may be answered.
 **Live updates.** A plugin backend calls `ctx.emit(event)`, which appends to a bounded per-plugin
 ring with a monotonic cursor, exposed at `WS /api/plugins/<id>/events?since=<cursor>`. That path
 is under `/api/`, so `authRequiredForRequest` returns `true` and the upgrade gate at
-`packages/jinn/src/gateway/server.ts:1189` authenticates it with no bespoke token check. The
+`packages/hundredfold/src/gateway/server.ts:1189` authenticates it with no bespoke token check. The
 cursor makes polling a complete fallback, so the socket is an accelerator and never the only way
 to see an event.
 
@@ -317,7 +317,7 @@ flagship plugin's dispatcher ended up in gateway core (`gateway/kanban_watchers.
 there was nowhere else for it to live.
 
 `server.js` may export `watcher: { start(ctx), stop() }`. The contract is deliberately the one
-already in the tree at `packages/jinn/src/shared/types.ts:268`: `start()` `:272`, `stop()`
+already in the tree at `packages/hundredfold/src/shared/types.ts:268`: `start()` `:272`, `stop()`
 `:273`, and health readable the way `getHealth()` `:275` is readable, keyed by id the way `:270`
 documents. Same vocabulary, so a reader who knows connectors knows this.
 
@@ -342,13 +342,13 @@ The gateway owns the lifecycle:
    id it happens to load under can never become two rows.
 3. **Re-entrant scans.** A rescan must not overlap a slow in-flight scan; reads and dynamic
    imports can exceed the debounce interval. A `scanning` guard, not a shorter interval.
-4. **Unwatchable or absent directory.** `~/.jinn/plugins/` may not exist. Absent is not an error,
+4. **Unwatchable or absent directory.** `~/.hundredfold/plugins/` may not exist. Absent is not an error,
    it is zero plugins. Unwatchable degrades to an explicit rescan action in the settings page
    rather than a silent no-op.
 5. **Folder deleted mid-flight.** Discovery reads a manifest that disappears before the import.
    Treated as "not installed", not as a load error.
 6. **Pending debounce timers surviving stop.** The hazard recorded in §1 against
-   `packages/jinn/src/gateway/watcher.ts:17`. The plugin debounce returns a handle with
+   `packages/hundredfold/src/gateway/watcher.ts:17`. The plugin debounce returns a handle with
    `cancel()`, and the supervisor calls it during stop, so shutdown does not fire a rescan into a
    torn-down registry.
 
@@ -367,13 +367,13 @@ only input to the decision: a plugin named in neither is disabled. Nothing the p
 change that, and nothing it ships even mentions it: neither the §2 manifest nor the module has a
 field for enablement, because a shipped value that flipped an unlisted plugin to enabled would be
 the plugin opting itself in, and only the operator gets to do that. This deliberately inverts
-`packages/jinn/src/mcp/resolver.ts:177`, where `enabled === false` means
+`packages/hundredfold/src/mcp/resolver.ts:177`, where `enabled === false` means
 absence is enabled. The difference is that an MCP server is something the operator already wrote
 into their config by hand, whereas a plugin directory can arrive by being copied. `disabled`
 wins over `enabled` when a plugin somehow appears in both, because the fail-closed reading is
 the safe one.
 
-The file is watched today at `packages/jinn/src/gateway/watcher.ts:81`, so a decision takes
+The file is watched today at `packages/hundredfold/src/gateway/watcher.ts:81`, so a decision takes
 effect without a restart.
 
 **One policy, three enforcement points**, and all three are required because each closes a
@@ -426,7 +426,7 @@ change the default fallback.
 manifest's `client` and `server` fields are attacker-influenced input. Reject a non-string or
 blank value, reject `path.isAbsolute()`, then `path.resolve()` and require the result to be
 *contained within* the plugin directory using a separator-aware check, not the string prefix used
-at `packages/jinn/src/gateway/server.ts:282`. Then, when both fields are present, compare the two
+at `packages/hundredfold/src/gateway/server.ts:282`. Then, when both fields are present, compare the two
 resolved paths and reject the plugin outright if they are equal (§2). Re-resolve at mount time as
 well — containment and the comparison both, on the same re-resolved paths, for the same reason.
 *Prevents:* the exact upstream RCE (`hermes_cli/web_server.py:16566`). An absolute path swallows
@@ -460,7 +460,7 @@ positioned so that an unauthenticated request receives auth's 401 and never the 
 `/api/plugins/<guess>/` and read enabled-versus-not off the status code, learning which plugins
 the operator has installed without ever authenticating. In this tree the ordering is structural
 rather than a convention to remember: the auth gate at
-`packages/jinn/src/gateway/server.ts:1098` returns 401 before `handleApiRequest` is called at
+`packages/hundredfold/src/gateway/server.ts:1098` returns 401 before `handleApiRequest` is called at
 `:1109`, so a gate living in the dispatch chain is downstream of it by construction. The gate
 also fails closed on an unknown plugin id, which is a 404 for the same reason.
 
@@ -503,7 +503,7 @@ satisfy, and it is what shrank the area list to four.
 
 | Not in v1 | Why deferred |
 | --- | --- |
-| Themes | Jinn's theming is CSS custom properties in two theme blocks, not a registry. A theme contribution would be a second theming system competing with the tokens, and nothing has asked for one. |
+| Themes | Hundredfold's theming is CSS custom properties in two theme blocks, not a registry. A theme contribution would be a second theming system competing with the tokens, and nothing has asked for one. |
 | Keybinds | There is no global keybinding layer to contribute into; building one is its own design, and a plugin-only shortcut registry would be the speculative half of it. |
 | Command palette | The app has global search, not a command palette. Contributing commands requires the palette to exist first. |
 | Panes | The shell is one route at a time (`packages/web/src/main.tsx:106`). A dockable pane tree is a shell rewrite that dwarfs the plugin system and must not be smuggled in as a plugin area. |
@@ -521,7 +521,7 @@ Each slice is graded against its section.
 | Slice | Section | Deliverable |
 | --- | --- | --- |
 | Registry | §3 | Contribution registry, area-scoped invalidation, `Slot`, error boundaries, and the status bar host |
-| SDK | §4, §5 | `@jinn/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
+| SDK | §4, §5 | `@hundredfold/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
 | Loader | §4 | Runtime loader: specifier rejection, shims, blob import, validation, hot reload |
 | Discovery and assets | §2, §6, §8, §9 | Discovery, manifest validation, `GET /api/plugins`, asset route with the three guards, config lists |
 | Backend mount | §6, §8, §9 | Backend mount, hot reload, runtime enable gate after auth, per-plugin error isolation |

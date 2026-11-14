@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, renderHook } from "@testing-library/react"
 import { clearSubBoardTabState, readSubBoardTabState, useSubBoardTabState, writeSubBoardTabState } from "../board/sub-board-tab-state"
 
-const KEY = "jinn-sub-board-tab:ACM-7"
+const KEY = "hundredfold-sub-board-tab:ACM-7"
 
 describe("a sub-board tab's stored state", () => {
   beforeEach(() => {

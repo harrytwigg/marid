@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 
-export const CHAT_SESSION_DND_MIME = 'application/x-jinn-chat-session'
+export const CHAT_SESSION_DND_MIME = 'application/x-hundredfold-chat-session'
 
 let activeDragSessionId: string | null = null
 

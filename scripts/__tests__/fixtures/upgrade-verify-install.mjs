@@ -18,8 +18,8 @@ export function installTarball(_tarball, prefix) {
 }
 
 export function run(_command, _args, { env }) {
-  const home = env.JINN_HOME
-  fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 4321\njinn:\n  version: 1.0.0\n")
+  const home = env.HUNDREDFOLD_HOME
+  fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 4321\nhundredfold:\n  version: 1.0.0\n")
   fs.mkdirSync(path.join(home, "skills", "example"), { recursive: true })
   fs.writeFileSync(path.join(home, "skills", "example", "SKILL.md"), "# Example\n")
 }
@@ -38,7 +38,7 @@ export function startGateway(cli, layout, _port, label) {
   fs.copyFileSync(path.join(home, "config.yaml"), path.join(backup, "config.yaml"))
   fs.cpSync(path.join(home, "skills"), path.join(backup, "skills"), { recursive: true })
   fs.writeFileSync(path.join(home, "skills", "example", "SKILL.md"), "# Example\n")
-  fs.writeFileSync(path.join(home, ".jinn-template-skills.json"), JSON.stringify({ version: "1.0.1", skills: ["example"] }))
+  fs.writeFileSync(path.join(home, ".hundredfold-template-skills.json"), JSON.stringify({ version: "1.0.1", skills: ["example"] }))
   const config = path.join(home, "config.yaml")
   fs.writeFileSync(config, fs.readFileSync(config, "utf8").replace(/  version:.*/, "  version: 1.0.1"))
 }

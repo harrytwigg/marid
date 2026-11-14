@@ -8,7 +8,7 @@
 # Nothing here uses real usage or quota. Only the upstream providers are fake: the real
 # gateway, config loader, runner and web run against a stub `claude` (scripts/fake-providers)
 # and a stub `opencode` (the engine tests' fixture), both steered by one scenario file and
-# both appending to one ledger. The instance gets a temporary JINN_HOME, HOME and XDG dirs,
+# both appending to one ledger. The instance gets a temporary HUNDREDFOLD_HOME, HOME and XDG dirs,
 # two fake Claude profile directories (A and B) declared under engines.claude.accounts, the
 # stubs as absolute `engines.<engine>.bin`, and a network guard that refuses (and logs) any
 # connection that is not loopback. It runs under `env -i`, so nothing of the caller's
@@ -23,27 +23,29 @@
 #   --pending     scenarios that wait on runtime work not yet merged: their result is
 #                 reported, never failed (default: none); a pending scenario that
 #                 passes is reported as such, and --strict fails the run on it
-#   --port        gateway port, 8060 or above (default: JINN_VERIFY_PORT, else a free one)
+#   --port        gateway port, 8060 or above (default: HUNDREDFOLD_VERIFY_PORT, else a free one)
 #   --keep        leave the last instance up for screenshots and print how to tear it down
 #   --retain DIR  copy the ledger, logs and results there at the end
 #   --skip-build  reuse the gateway repo's existing build
 #
-# Environment: JINN_VERIFY_NODE_BIN (node to run everything with, default the one beside pnpm),
-# JINN_VERIFY_TMP_ROOT (default /tmp), JINN_VERIFY_GATEWAY_REPO (a checkout to run the gateway
+# Environment: HUNDREDFOLD_VERIFY_NODE_BIN (node to run everything with, default the one beside pnpm),
+# HUNDREDFOLD_VERIFY_TMP_ROOT (default /tmp), HUNDREDFOLD_VERIFY_GATEWAY_REPO (a checkout to run the gateway
 # from, e.g. main, with this checkout's fakes and scenarios).
 set -euo pipefail
 
 # The caller's environment may name a gateway instance (home, port, identity). None of it is
 # inert here, so it is dropped before anything reads it, and the instance starts under `env -i`.
-unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID \
-  JINN_SESSION_CAPABILITY JINN_TAKE_PORT JINN_BINDING_HOME JINN_HOME_IDENTITY CLAUDE_CONFIG_DIR
+unset HUNDREDFOLD_HOME HUNDREDFOLD_PORT HUNDREDFOLD_HOST HUNDREDFOLD_INSTANCE HUNDREDFOLD_GATEWAY_URL HUNDREDFOLD_GATEWAY_TOKEN HUNDREDFOLD_SESSION_ID \
+  HUNDREDFOLD_SESSION_CAPABILITY HUNDREDFOLD_TAKE_PORT HUNDREDFOLD_BINDING_HOME HUNDREDFOLD_HOME_IDENTITY CLAUDE_CONFIG_DIR
+# A shell started by an older build exports the old names, and a new build adopts them.
+eval "$(node "$(dirname "${BASH_SOURCE[0]}")/legacy-names.mjs" unset HOME PORT HOST INSTANCE GATEWAY_URL GATEWAY_TOKEN SESSION_ID SESSION_CAPABILITY TAKE_PORT BINDING_HOME HOME_IDENTITY)"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-GATEWAY_REPO="$(cd "${JINN_VERIFY_GATEWAY_REPO:-$REPO}" && pwd -P)"
-HELPER="$REPO/scripts/jinn-sandbox.sh"
+GATEWAY_REPO="$(cd "${HUNDREDFOLD_VERIFY_GATEWAY_REPO:-$REPO}" && pwd -P)"
+HELPER="$REPO/scripts/hundredfold-sandbox.sh"
 DRIVER_DIR="$REPO/scripts/verify-fallback-chains"
 INSTANCE="fallback-chains"
-MODE="both"; ONLY=""; PENDING=""; PORT="${JINN_VERIFY_PORT:-}"; KEEP=0; RETAIN=""; SKIP_BUILD=0; STRICT=0; TEARDOWN=""
+MODE="both"; ONLY=""; PENDING=""; PORT="${HUNDREDFOLD_VERIFY_PORT:-}"; KEEP=0; RETAIN=""; SKIP_BUILD=0; STRICT=0; TEARDOWN=""
 
 die() { echo "verify-fallback-chains: $1" >&2; exit "${2:-2}"; }
 
@@ -65,20 +67,20 @@ done
 [[ "$MODE" == run || "$MODE" == server || "$MODE" == both ]] || die "--mode is run, server or both"
 
 PNPM_BIN="$(command -v pnpm || true)"
-NODE_BIN="${JINN_VERIFY_NODE_BIN:-}"
+NODE_BIN="${HUNDREDFOLD_VERIFY_NODE_BIN:-}"
 if [[ -z "$NODE_BIN" ]]; then
   # The node beside pnpm when there is one (the pinned build), else the first on PATH.
   if [[ -n "$PNPM_BIN" && -x "$(dirname "$PNPM_BIN")/node" ]]; then NODE_BIN="$(dirname "$PNPM_BIN")/node"; else NODE_BIN="$(command -v node || true)"; fi
 fi
-[[ -n "$NODE_BIN" && -x "$NODE_BIN" ]] || die "node not found; set JINN_VERIFY_NODE_BIN"
+[[ -n "$NODE_BIN" && -x "$NODE_BIN" ]] || die "node not found; set HUNDREDFOLD_VERIFY_NODE_BIN"
 NODE_DIR="$(dirname "$NODE_BIN")"
-TMP_BASE="$(cd "${JINN_VERIFY_TMP_ROOT:-/tmp}" && pwd -P)"
+TMP_BASE="$(cd "${HUNDREDFOLD_VERIFY_TMP_ROOT:-/tmp}" && pwd -P)"
 ACCOUNT_HOME="$("$NODE_BIN" -e 'process.stdout.write(require("node:fs").realpathSync.native(require("node:os").userInfo().homedir))')"
 
 port_listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t >/dev/null 2>&1; }
 
 # Refuses a path that could belong to a real instance: outside the temporary root, or an
-# operator home (the account's own home, ~/.jinn*, ~/.claude*).
+# operator home (the account's own home, ~/.hundredfold*, ~/.claude*).
 refuse_unless_temporary() {
   local label="$1" path="$2" resolved
   resolved="$("$NODE_BIN" -e 'const fs=require("node:fs"),p=require("node:path");let d=process.argv[1];const tail=[];while(!fs.existsSync(d)){tail.unshift(p.basename(d));d=p.dirname(d)}process.stdout.write(p.join(fs.realpathSync.native(d),...tail))' "$path")"
@@ -87,7 +89,7 @@ refuse_unless_temporary() {
     *) die "refusing $label $resolved: it is outside the temporary verification root $VERIFY_ROOT" ;;
   esac
   case "$resolved" in
-    "$ACCOUNT_HOME"/.jinn|"$ACCOUNT_HOME"/.jinn/*|"$ACCOUNT_HOME"/.jinn-*|"$ACCOUNT_HOME"/.claude|"$ACCOUNT_HOME"/.claude/*|"$ACCOUNT_HOME"/.claude-*)
+    "$ACCOUNT_HOME"/.hundredfold|"$ACCOUNT_HOME"/.hundredfold/*|"$ACCOUNT_HOME"/.hundredfold-*|"$ACCOUNT_HOME"/.claude|"$ACCOUNT_HOME"/.claude/*|"$ACCOUNT_HOME"/.claude-*)
       die "refusing $label $resolved: it is inside an operator home" ;;
   esac
 }
@@ -105,7 +107,7 @@ instance_env() {
     XDG_CONFIG_HOME="$HOST_HOME/.config" XDG_DATA_HOME="$HOST_HOME/.local/share" XDG_CACHE_HOME="$HOST_HOME/.cache" XDG_STATE_HOME="$HOST_HOME/.local/state" \
     FAKE_PROVIDER_OPENCODE_MODELS="own-provider/model-own,x-provider/model-x,y-provider/model-y" \
     FAKE_PROVIDER_SCENARIO="$VERIFY_ROOT/scenario.json" FAKE_PROVIDER_LEDGER="$VERIFY_ROOT/ledger.jsonl" FAKE_PROVIDER_NET_LOG="$VERIFY_ROOT/network-refusals.jsonl" \
-    JINN_CLAUDE_USAGE_API=off NODE_OPTIONS="--require $DRIVER_DIR/network-guard.cjs" JINN_REPO="$GATEWAY_REPO" JINN_SANDBOX_NODE_BIN="$NODE_BIN" "$@"
+    HUNDREDFOLD_CLAUDE_USAGE_API=off NODE_OPTIONS="--require $DRIVER_DIR/network-guard.cjs" HUNDREDFOLD_REPO="$GATEWAY_REPO" HUNDREDFOLD_SANDBOX_NODE_BIN="$NODE_BIN" "$@"
 }
 
 sandbox() { instance_env "$HELPER" "$@"; }
@@ -122,7 +124,7 @@ teardown_instance() {
 
 if [[ -n "$TEARDOWN" ]]; then
   VERIFY_ROOT="$(cd "$TEARDOWN" && pwd -P)"
-  [[ -f "$VERIFY_ROOT/instance.env" && "$VERIFY_ROOT" == "$TMP_BASE"/jinn-fallback-chains.* ]] || die "$TEARDOWN is not a verification root this script made"
+  [[ -f "$VERIFY_ROOT/instance.env" && "$VERIFY_ROOT" == "$TMP_BASE"/hundredfold-fallback-chains.* ]] || die "$TEARDOWN is not a verification root this script made"
   # shellcheck disable=SC1091
   source "$VERIFY_ROOT/instance.env"
   teardown_instance "$VERIFY_ROOT"
@@ -134,7 +136,7 @@ fi
 [[ -x "$HELPER" ]] || die "sandbox helper not found: $HELPER"
 # NODE_OPTIONS carries the guard's path unquoted; a space would make node drop the option and the guard never load.
 [[ "$DRIVER_DIR" != *[[:space:]]* ]] || die "the checkout path must not contain whitespace: $DRIVER_DIR"
-[[ -f "$GATEWAY_REPO/packages/jinn/package.json" ]] || die "JINN_VERIFY_GATEWAY_REPO is not a checkout: $GATEWAY_REPO"
+[[ -f "$GATEWAY_REPO/packages/hundredfold/package.json" ]] || die "HUNDREDFOLD_VERIFY_GATEWAY_REPO is not a checkout: $GATEWAY_REPO"
 if [[ -z "$PORT" ]]; then
   for candidate in $(seq $((8060 + RANDOM % 100)) 8199); do port_listening "$candidate" || { PORT="$candidate"; break; }; done
   [[ -n "$PORT" ]] || die "no free port between 8060 and 8199"
@@ -146,12 +148,12 @@ if (( ! SKIP_BUILD )); then
   echo "Building $GATEWAY_REPO"
   ( cd "$GATEWAY_REPO" && PATH="$NODE_DIR:$PATH" nice -n 10 pnpm build >/dev/null ) || die "build failed" 1
 fi
-[[ -f "$GATEWAY_REPO/packages/jinn/dist/bin/jinn.js" ]] || die "no build at $GATEWAY_REPO/packages/jinn/dist; drop --skip-build"
+[[ -f "$GATEWAY_REPO/packages/hundredfold/dist/bin/hundredfold.js" ]] || die "no build at $GATEWAY_REPO/packages/hundredfold/dist; drop --skip-build"
 
-VERIFY_ROOT="$(mktemp -d "$TMP_BASE/jinn-fallback-chains.XXXXXX")"
+VERIFY_ROOT="$(mktemp -d "$TMP_BASE/hundredfold-fallback-chains.XXXXXX")"
 VERIFY_ROOT="$(cd "$VERIFY_ROOT" && pwd -P)"
 mkdir -p "$VERIFY_ROOT/tmp" "$VERIFY_ROOT/artifacts" "$VERIFY_ROOT/bin"
-# `jinn setup` pre-caches `npx skills`, a registry fetch: npx and npm do nothing in the instance.
+# `hundredfold setup` pre-caches `npx skills`, a registry fetch: npx and npm do nothing in the instance.
 for stub in npx npm; do printf '#!/bin/sh\necho "verify-fallback-chains: %s is disabled in the instance" >&2\nexit 0\n' "$stub" > "$VERIFY_ROOT/bin/$stub"; chmod +x "$VERIFY_ROOT/bin/$stub"; done
 : > "$VERIFY_ROOT/ledger.jsonl"; : > "$VERIFY_ROOT/network-refusals.jsonl"
 STATUS=0; STARTED=0; HOST_HOME=""
@@ -168,11 +170,11 @@ cleanup() {
   if (( KEEP && STARTED && code != 130 )); then
     echo
     echo "Instance kept on http://127.0.0.1:$PORT (home $SANDBOX_HOME; its token is in gateway.json there)."
-    echo "Tear it down with: JINN_VERIFY_TMP_ROOT=$TMP_BASE $0 --teardown $VERIFY_ROOT"
+    echo "Tear it down with: HUNDREDFOLD_VERIFY_TMP_ROOT=$TMP_BASE $0 --teardown $VERIFY_ROOT"
     exit "$code"
   fi
   if (( STARTED )); then teardown_instance "$VERIFY_ROOT" || code=3; fi
-  if [[ "$VERIFY_ROOT" == "$TMP_BASE"/jinn-fallback-chains.* && -d "$VERIFY_ROOT" ]]; then rm -r "$VERIFY_ROOT"; fi
+  if [[ "$VERIFY_ROOT" == "$TMP_BASE"/hundredfold-fallback-chains.* && -d "$VERIFY_ROOT" ]]; then rm -r "$VERIFY_ROOT"; fi
   echo "Destroyed the instance and removed $VERIFY_ROOT"
   exit "$code"
 }
@@ -182,7 +184,7 @@ trap 'exit 130' INT TERM
 run_mode() {
   local mode="$1"
   HOST_HOME="$VERIFY_ROOT/host-$mode"
-  SANDBOX_HOME="$HOST_HOME/.jinn-$INSTANCE"
+  SANDBOX_HOME="$HOST_HOME/.hundredfold-$INSTANCE"
   mkdir -p "$HOST_HOME/.config" "$HOST_HOME/.local/share" "$HOST_HOME/.cache" "$HOST_HOME/.local/state"
   for path in "$HOST_HOME" "$SANDBOX_HOME" "$HOST_HOME/profile-a" "$HOST_HOME/profile-b" "$SANDBOX_HOME/.claude-sandbox" "$VERIFY_ROOT/tmp"; do
     refuse_unless_temporary "path" "$path"

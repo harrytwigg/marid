@@ -57,7 +57,7 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
 
 /**
  * The stored layout, unless the stored working set says otherwise. This layout writes both keys,
- * so they only disagree when something else wrote `jinn-chat-working-set` — an older build, the
+ * so they only disagree when something else wrote `hundredfold-chat-working-set` — an older build, the
  * upstream grid, a test seeding it — and then that list is the newer truth and the layout is
  * rebuilt from it, unarranged. An absent key is not a disagreement (cleared site data, a first
  * run): the layout stands, and neither is a session deleted since. The cap is left to

@@ -20,8 +20,8 @@ along its [fallback chain](../../docs/fallback-chains.md), which can cross
 models, providers, engines and Claude profiles. There is no fallback plugin in
 this directory. A host that still runs one (`opencode-rate-limit` on 1.x, or an
 older copy of this directory's `model-fallback.js`) would fall back twice, so
-`jinn doctor`, the gateway's start-up log and the opencode entry of
-`/api/engines` report it. `jinn fallback migrate-opencode` prints the chain
+`hundredfold doctor`, the gateway's start-up log and the opencode entry of
+`/api/engines` report it. `hundredfold fallback migrate-opencode` prints the chain
 equivalent to its `rate-limit-fallback.json`; see
 [Migrating a host](../../docs/fallback-chains.md#migrating-a-host).
 

@@ -7,10 +7,10 @@
 
 import type { Session } from "@/components/chat/session-signals"
 
-const READ_STORAGE_KEY = "jinn-read-sessions"
-const COLLAPSE_STORAGE_KEY = "jinn-sidebar-collapsed"
-const EXPANDED_STORAGE_KEY = "jinn-sidebar-expanded"
-const TREE_COLLAPSED_STORAGE_KEY = "jinn-sidebar-tree-collapsed"
+const READ_STORAGE_KEY = "hundredfold-read-sessions"
+const COLLAPSE_STORAGE_KEY = "hundredfold-sidebar-collapsed"
+const EXPANDED_STORAGE_KEY = "hundredfold-sidebar-expanded"
+const TREE_COLLAPSED_STORAGE_KEY = "hundredfold-sidebar-tree-collapsed"
 
 // The read set is capped so a long-lived instance cannot grow one unbounded
 // localStorage row; the oldest ids fall off first.

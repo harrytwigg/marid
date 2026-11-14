@@ -12,7 +12,7 @@
 
 - Backend only: do not modify `packages/web`.
 - Work from local `main` HEAD in an isolated worktree and fast-forward local `main` after verification.
-- Never touch gateway ports 7777/7788 or personal `~/.jinn` runtime data.
+- Never touch gateway ports 7777/7788 or personal `~/.hundredfold` runtime data.
 - Public repository content must stay generic and pass the privacy leak scan.
 - No `Co-Authored-By` commit trailers.
 - Every behavior change follows a witnessed red-green-refactor cycle.
@@ -23,8 +23,8 @@
 ### Task 1: Paginated, filterable query substrate with true totals
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Test: `packages/jinn/src/work-items/__tests__/list-limit.test.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/list-limit.test.ts`
 
 **Interfaces:**
 - Consumes: the existing `WorkItem`, `WorkItemStatus`, `WorkItemSource`, and SQLite `work_items` table.
@@ -55,7 +55,7 @@ Seed distinct `status`, `assignee`, `department`, `source`, `updated_at`, title,
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/list-limit.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/list-limit.test.ts
 ```
 
 Expected: FAIL because `queryWorkItems`, `offset`, date filters, and true totals do not exist.
@@ -99,17 +99,17 @@ Run the Step 3 command. Expected: all focused tests pass.
 - [ ] **Step 6: Commit the query substrate**
 
 ```bash
-git add packages/jinn/src/work-items/store.ts packages/jinn/src/work-items/__tests__/list-limit.test.ts
+git add packages/hundredfold/src/work-items/store.ts packages/hundredfold/src/work-items/__tests__/list-limit.test.ts
 git commit -m "feat(todos): add paginated filtered work-item queries"
 ```
 
 ### Task 2: Rank schema and persisted manual ordering
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/migrate.ts`
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Test: `packages/jinn/src/work-items/__tests__/migrate.test.ts`
-- Test: `packages/jinn/src/work-items/__tests__/store.test.ts`
+- Modify: `packages/hundredfold/src/work-items/migrate.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/migrate.test.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/store.test.ts`
 
 **Interfaces:**
 - Consumes: the query ordering from Task 1.
@@ -122,7 +122,7 @@ Assert fresh schema and an already-migrated schema both expose nullable `rank`, 
 - [ ] **Step 2: Run migration tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/migrate.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/migrate.test.ts
 ```
 
 Expected: FAIL because `rank` and its index are absent.
@@ -146,7 +146,7 @@ Assert ranked rows sort by ascending rank within a status, rank persists across 
 - [ ] **Step 6: Run store tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/store.test.ts src/work-items/__tests__/list-limit.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/store.test.ts src/work-items/__tests__/list-limit.test.ts
 ```
 
 Expected: FAIL because work-item updates and rank mapping are absent.
@@ -175,15 +175,15 @@ Run the Step 6 command. Expected: all focused tests pass.
 - [ ] **Step 9: Commit rank persistence**
 
 ```bash
-git add packages/jinn/src/work-items/migrate.ts packages/jinn/src/work-items/store.ts packages/jinn/src/work-items/__tests__/migrate.test.ts packages/jinn/src/work-items/__tests__/store.test.ts
+git add packages/hundredfold/src/work-items/migrate.ts packages/hundredfold/src/work-items/store.ts packages/hundredfold/src/work-items/__tests__/migrate.test.ts packages/hundredfold/src/work-items/__tests__/store.test.ts
 git commit -m "feat(todos): persist manual work-item rank"
 ```
 
 ### Task 3: Gateway list/search shapes and filters
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/work-items-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts`
 
 **Interfaces:**
 - Consumes: `queryWorkItems` from Task 1 and `WorkItem.rank` from Task 2.
@@ -216,7 +216,7 @@ Assert both endpoints accept `status`, `assignee`, `department`, `source`, `sinc
 - [ ] **Step 2: Run route tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/work-items-route.test.ts
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/work-items-route.test.ts
 ```
 
 Expected: FAIL because list/search do not expose pagination metadata, `q`, or date filters.
@@ -232,15 +232,15 @@ Run the Step 2 command. Expected: route tests pass.
 - [ ] **Step 5: Commit the API query surface**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/work-items-route.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts
 git commit -m "feat(todos): expose totals pagination and filters"
 ```
 
 ### Task 4: Operator-only Todo metadata PATCH
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/work-items-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts`
 
 **Interfaces:**
 - Consumes: `updateWorkItem` from Task 2 and existing scoped caller identity/auth logic.
@@ -257,7 +257,7 @@ Assert `PATCH { status: "done" }` is rejected and leaves status unchanged; then 
 - [ ] **Step 3: Run route tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/work-items-route.test.ts
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/work-items-route.test.ts
 ```
 
 Expected: FAIL because the PATCH route does not exist.
@@ -273,7 +273,7 @@ Run the Step 3 command. Expected: route tests pass.
 - [ ] **Step 6: Commit operator editing**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/work-items-route.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts
 git commit -m "feat(todos): add operator metadata editing"
 ```
 
@@ -289,7 +289,7 @@ git commit -m "feat(todos): add operator metadata editing"
 - [ ] **Step 1: Run focused work-items/gateway tests**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items src/gateway/__tests__/work-items-route.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items src/gateway/__tests__/work-items-route.test.ts
 ```
 
 - [ ] **Step 2: Run typecheck and full monorepo suite**

@@ -1,6 +1,6 @@
 import { dlog } from "./debug-log";
 import { nextReconnectDelay } from "./ws-backoff";
-import { decodeGatewayEvent, type GatewayEventListener } from "@jinn/gateway-events";
+import { decodeGatewayEvent, type GatewayEventListener } from "@hundredfold/gateway-events";
 import { gatewayTransport, type GatewaySocketConnection } from "./gateway-transport";
 
 /**

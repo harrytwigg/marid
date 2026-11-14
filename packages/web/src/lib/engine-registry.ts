@@ -2,7 +2,7 @@
 // field here should not mean touching the file every other call lives in.
 // Re-exported from `lib/api` so the existing importers are unchanged.
 
-import type { EffortMechanism } from "@jinn/effort-mechanism"
+import type { EffortMechanism } from "@hundredfold/effort-mechanism"
 
 export interface ModelInfo {
   id: string;

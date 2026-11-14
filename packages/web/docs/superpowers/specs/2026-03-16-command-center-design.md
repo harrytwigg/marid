@@ -3,7 +3,7 @@
 **Date**: 2026-03-16
 **Status**: Draft
 **Author**: Jimbo + the operator (brainstorm)
-**Scope**: New top-level page in Jinn web UI for project-centric operational focus
+**Scope**: New top-level page in Hundredfold web UI for project-centric operational focus
 
 ## Problem
 
@@ -125,7 +125,7 @@ A living, spatial map of the operation. Each project is an interactive node.
 - Color inherits from the more active project
 
 **Interaction:**
-- Drag nodes to arrange spatially - positions persist in localStorage (`jinn-graph-positions`)
+- Drag nodes to arrange spatially - positions persist in localStorage (`hundredfold-graph-positions`)
 - Zoom/pan with scroll wheel and trackpad (React Flow built-in)
 - Click node → opens slide-over panel (tasks + filtered sessions)
 - Hover node → tooltip with full breakdown (sessions by status, task summary)
@@ -204,7 +204,7 @@ Opens from right on project click in any view. 40% width desktop, full width mob
 
 ## Smart Decay Filter
 
-Global adjustable filter, persisted in localStorage (`jinn-decay-filter`):
+Global adjustable filter, persisted in localStorage (`hundredfold-decay-filter`):
 
 ```typescript
 interface DecayFilter {
@@ -270,14 +270,14 @@ New events for real-time Command Center updates:
 
 Projects and tasks are stored in **JSON files** alongside existing gateway data:
 
-- `~/.jinn/projects.json` - array of `Project` objects, loaded into memory on gateway startup, flushed on every mutation
-- `~/.jinn/tasks.json` - array of `Task` objects, same lifecycle
+- `~/.hundredfold/projects.json` - array of `Project` objects, loaded into memory on gateway startup, flushed on every mutation
+- `~/.hundredfold/tasks.json` - array of `Task` objects, same lifecycle
 
 This follows the existing pattern used by `cron/jobs.json` and session storage - file-based, watched for changes, hot-reloaded.
 
 ### Session Schema Migration
 
-The `Session` interface in `packages/jinn/src/shared/types.ts` gains three new fields:
+The `Session` interface in `packages/hundredfold/src/shared/types.ts` gains three new fields:
 
 ```typescript
 projects: string[]              // default: []
@@ -289,7 +289,7 @@ priority: 'urgent' | 'normal' | 'low' | null  // default: null
 
 ### New Gateway Routes
 
-In `packages/jinn/src/gateway/api.ts`:
+In `packages/hundredfold/src/gateway/api.ts`:
 
 - `PATCH /api/sessions/:id` - new route accepting `{projects?, priority?, attentionRequired?}`, updates session in registry and emits `session:updated` WebSocket event
 - `GET/POST /api/projects` - CRUD for projects (read/write `projects.json`)
@@ -316,7 +316,7 @@ deleteTask(id: string): Promise<void>
 
 ### Auto-Tagger Module
 
-New module `packages/jinn/src/gateway/project-tagger.ts`:
+New module `packages/hundredfold/src/gateway/project-tagger.ts`:
 - Exported function `autoTagSession(session: Session, projects: Project[], org: OrgRegistry): string[]`
 - Called synchronously by the session create/update handlers
 - Returns array of project IDs to assign
@@ -347,10 +347,10 @@ interface ProjectWithStats extends Project {
 
 | Data | Storage | Rationale |
 |------|---------|-----------|
-| Graph node positions | localStorage `jinn-graph-positions` | Per-user visual preference |
-| Decay filter settings | localStorage `jinn-decay-filter` | Per-user preference |
-| Active tab | localStorage `jinn-command-tab` | Remember last view |
-| Collapsed swimlanes | localStorage `jinn-timeline-collapsed` | Per-user preference |
+| Graph node positions | localStorage `hundredfold-graph-positions` | Per-user visual preference |
+| Decay filter settings | localStorage `hundredfold-decay-filter` | Per-user preference |
+| Active tab | localStorage `hundredfold-command-tab` | Remember last view |
+| Collapsed swimlanes | localStorage `hundredfold-timeline-collapsed` | Per-user preference |
 
 ## Navigation Changes
 

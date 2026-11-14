@@ -228,8 +228,8 @@ function keyOfA(h) {
 }
 /** The operator's clear, through the real CLI against the instance home. */
 function cliClear(h, key) {
-  const out = execFileSync(process.execPath, [path.join(process.env.JINN_REPO, "packages/jinn/dist/bin/jinn.js"), "limits", "--clear", key],
-    { env: { ...process.env, JINN_HOME: h.args.home }, encoding: "utf8" });
+  const out = execFileSync(process.execPath, [path.join(process.env.HUNDREDFOLD_REPO, "packages/hundredfold/dist/bin/hundredfold.js"), "limits", "--clear", key],
+    { env: { ...process.env, HUNDREDFOLD_HOME: h.args.home }, encoding: "utf8" });
   console.log(`         cli: ${out.trim().split("\n")[0]}`);
   return out;
 }

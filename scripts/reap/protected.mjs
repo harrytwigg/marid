@@ -9,12 +9,24 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
+import { LEGACY, legacyEnv, legacyHomeName, legacyTitle } from "../legacy-names.mjs"
 import { isThrowawayHome } from "./gateways.mjs"
 
 const DEFAULT_PROTECTED_PORTS = "7777 7788"
 
+// What an install made before the rename calls things. A live instance may still be running under them, and the
+// sweep protects what is live: so every place that names the live home or its registry names both.
+const LEGACY_HOME_NAME = legacyHomeName
+const LEGACY_DATA_NAME = LEGACY.codename
+
 export function resolveDefaultHome(env) {
-  return env.JINN_HOME ? path.resolve(env.JINN_HOME) : path.join(os.homedir(), ".jinn")
+  const explicit = env.HUNDREDFOLD_HOME || legacyEnv("HOME").map((key) => env[key]).find(Boolean)
+  return explicit ? path.resolve(explicit) : path.join(os.homedir(), ".hundredfold")
+}
+
+/** The default home an older build used, which stays live until that instance has been moved. */
+export function legacyDefaultHome() {
+  return path.join(os.homedir(), LEGACY_HOME_NAME)
 }
 
 function readJson(file) {
@@ -26,12 +38,16 @@ function readJson(file) {
 }
 
 /** Where the gateway keeps the instance directory, mirroring `instances/directory.ts`. */
-function hostDataDir(env) {
+function hostDataDirs(env, names = ["Hundredfold", "hundredfold"]) {
   const home = os.homedir()
-  if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "Jinn")
-  if (process.platform === "win32") return path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "Jinn")
-  return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "jinn")
+  const [title, lower] = names
+  if (process.platform === "darwin") return path.join(home, "Library", "Application Support", title)
+  if (process.platform === "win32") return path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), title)
+  return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), lower)
 }
+
+const hostDataDir = (env) => hostDataDirs(env)
+const legacyHostDataDir = (env) => hostDataDirs(env, [legacyTitle, LEGACY_DATA_NAME])
 
 /**
  * Every file that could hold the instance directory, most authoritative first:
@@ -41,7 +57,14 @@ function hostDataDir(env) {
  * the protected set, while missing one reaps a live instance.
  */
 export function instancesRegistryPaths(defaultHome, env) {
-  return [env.JINN_INSTANCES_REGISTRY, path.join(hostDataDir(env), "instances.json"), path.join(defaultHome, "instances.json")]
+  return [
+    env.HUNDREDFOLD_INSTANCES_REGISTRY,
+    ...legacyEnv("INSTANCES_REGISTRY").map((key) => env[key]),
+    path.join(hostDataDir(env), "instances.json"),
+    path.join(legacyHostDataDir(env), "instances.json"),
+    path.join(defaultHome, "instances.json"),
+    path.join(legacyDefaultHome(), "instances.json"),
+  ]
     .filter(Boolean)
     .map((file) => path.resolve(file))
 }
@@ -83,7 +106,7 @@ function directChildren(root) {
  * spared, so a missed home leaks rather than misfires.
  */
 export function discoverHomes({ defaultHome, registered, throwawayRoots }) {
-  const homes = new Set([defaultHome, ...registered.map((entry) => path.resolve(entry.home))])
+  const homes = new Set([defaultHome, legacyDefaultHome(), ...registered.map((entry) => path.resolve(entry.home))])
   for (const root of [...throwawayRoots, os.homedir()]) {
     for (const entry of directChildren(root)) {
       const home = path.join(root, entry.name)
@@ -112,11 +135,12 @@ export function mapPidsToHomes(homes) {
 /**
  * Whoever is listening on a protected port, whatever its home claims. Ports come
  * from the registry as well as the constants, so a new instance protects itself.
- * `JINN_REAP_PROTECTED_PORTS` uses `-` rather than `:-` on purpose: a test sets
+ * `HUNDREDFOLD_REAP_PROTECTED_PORTS` uses `-` rather than `:-` on purpose: a test sets
  * it empty to disable live probing, and `:-` would silently restore the defaults.
  */
 export function protectedPortOwners(registered, env) {
-  const configured = (env.JINN_REAP_PROTECTED_PORTS ?? DEFAULT_PROTECTED_PORTS).split(/\s+/).filter(Boolean)
+  const configured = (env.HUNDREDFOLD_REAP_PROTECTED_PORTS ?? legacyEnv("REAP_PROTECTED_PORTS").map((key) => env[key]).find((value) => value !== undefined) ?? DEFAULT_PROTECTED_PORTS)
+    .split(/\s+/).filter(Boolean)
   const ports = new Set([...configured, ...registered.map((entry) => String(entry.port)).filter(Boolean)])
   const owners = new Set()
   for (const port of ports) {

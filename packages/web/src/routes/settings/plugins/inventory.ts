@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { GATEWAY_EVENTS } from "@jinn/gateway-events"
+import { GATEWAY_EVENTS } from "@hundredfold/gateway-events"
 import { useGateway } from "@/hooks/use-gateway"
 import { authFetch } from "@/lib/auth"
 

@@ -24,9 +24,9 @@ export function tallerFor(size: Size): Size {
   return { ...size, height: size.name === 'phone' ? 1500 : 1150 }
 }
 
-const home = process.env.JINN_VERIFY_HOME
-const artifacts = process.env.JINN_VERIFY_ARTIFACTS
-if (!home || !artifacts) throw new Error('JINN_VERIFY_HOME and JINN_VERIFY_ARTIFACTS are required')
+const home = process.env.HUNDREDFOLD_VERIFY_HOME
+const artifacts = process.env.HUNDREDFOLD_VERIFY_ARTIFACTS
+if (!home || !artifacts) throw new Error('HUNDREDFOLD_VERIFY_HOME and HUNDREDFOLD_VERIFY_ARTIFACTS are required')
 
 export function gatewayToken(): string {
   const gateway = JSON.parse(fs.readFileSync(path.join(home!, 'gateway.json'), 'utf8')) as { token?: unknown }
@@ -53,9 +53,9 @@ export async function openPage(browser: Browser, theme: Theme, size: Size, url: 
     extraHTTPHeaders: { authorization: `Bearer ${gatewayToken()}` },
   })
   await context.addInitScript((settings: { theme: Theme; chatListOpen: boolean }) => {
-    localStorage.setItem('jinn-theme', settings.theme)
-    localStorage.setItem('jinn-onboarded', 'true')
-    localStorage.setItem('jinn-chat-list-open', String(settings.chatListOpen))
+    localStorage.setItem('hundredfold-theme', settings.theme)
+    localStorage.setItem('hundredfold-onboarded', 'true')
+    localStorage.setItem('hundredfold-chat-list-open', String(settings.chatListOpen))
   }, { theme, chatListOpen })
   const page = await context.newPage()
   await page.goto(url, { waitUntil: 'networkidle' })
@@ -65,7 +65,7 @@ export async function openPage(browser: Browser, theme: Theme, size: Size, url: 
 /** Links a seeded session (see seed-departments.mjs) to a Todo, so it shows on that Todo's page. */
 export function linkSeededSession(key: string, todoId: string): void {
   const seed = JSON.parse(fs.readFileSync(path.join(home!, 'departments-seed.json'), 'utf8')) as { sessions: Record<string, string> }
-  const Database = createRequire(path.join(process.cwd(), 'packages', 'jinn', 'package.json'))('better-sqlite3')
+  const Database = createRequire(path.join(process.cwd(), 'packages', 'hundredfold', 'package.json'))('better-sqlite3')
   const db = new Database(path.join(home!, 'sessions', 'registry.db'))
   try {
     const result = db.prepare('UPDATE sessions SET work_item_id = ? WHERE id = ?').run(todoId, seed.sessions[key])

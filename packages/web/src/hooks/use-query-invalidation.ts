@@ -7,7 +7,7 @@ import { forgetTodoPreview } from '@/lib/todo-preview'
 import { patchSessionBackgroundActivity, removeFromSessionsCache } from '@/hooks/use-sessions'
 import { mergeTodoIntoCaches } from '@/routes/todos/todo-edit-request'
 import type { BackgroundActivity, SessionsResponse } from '@/lib/api'
-import { GATEWAY_EVENTS, type GatewayEvent } from '@jinn/gateway-events'
+import { GATEWAY_EVENTS, type GatewayEvent } from '@hundredfold/gateway-events'
 
 /** The company mutation event: a Todo, a sprint the Todos embed, or a department. */
 function handleCompanyChanged(

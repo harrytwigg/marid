@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FallbackLink } from '@jinn/fallback-chain-wire'
+import type { FallbackLink } from '@hundredfold/fallback-chain-wire'
 import type { EnginesResponse } from '@/lib/api'
 import { ChainEditor } from '../chain-editor'
 

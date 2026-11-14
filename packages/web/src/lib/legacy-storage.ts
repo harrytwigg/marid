@@ -2,7 +2,7 @@ import { CODENAME, LEGACY_CODENAME, isRenamed } from "./codename"
 
 /**
  * A browser holds the operator's settings, drafts, tabs and (in the desktop app) the saved gateways
- * under keys that begin with the codename: `jinn-<name>`, `jinn.<name>` and `jinn:<name>`, some with
+ * under keys that begin with the codename: `hundredfold-<name>`, `hundredfold.<name>` and `hundredfold:<name>`, some with
  * a dynamic tail (a session id, an origin, a note path). When the codename changes, code reads the
  * new prefix, so each such key is copied once to its new name. Copied, not moved: the old key stays
  * for as long as the old build might be run again.

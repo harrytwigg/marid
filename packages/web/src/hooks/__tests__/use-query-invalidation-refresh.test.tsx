@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useQueryInvalidation } from '../use-query-invalidation'
-import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 
 let listener: ((event: string, payload: unknown) => void) | undefined
 

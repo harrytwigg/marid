@@ -84,7 +84,7 @@ beforeAll(() => {
   }
 })
 
-const SELECTOR_KEY = 'jinn-chat-new-session-selector'
+const SELECTOR_KEY = 'hundredfold-chat-new-session-selector'
 const remember = (profile: string) => localStorage.setItem(SELECTOR_KEY, JSON.stringify({ engine: 'claude', model: 'opus', profile }))
 const remembered = () => JSON.parse(localStorage.getItem(SELECTOR_KEY) ?? '{}') as { profile?: string }
 

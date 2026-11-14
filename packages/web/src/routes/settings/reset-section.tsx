@@ -12,7 +12,7 @@ export function ResetSection({ resetAll }: { resetAll: () => void }) {
         <Button
           variant="secondary"
           onClick={() => {
-            localStorage.removeItem("jinn-onboarded")
+            localStorage.removeItem("hundredfold-onboarded")
             window.location.reload()
           }}
         >
@@ -26,8 +26,8 @@ export function ResetSection({ resetAll }: { resetAll: () => void }) {
             if (
               window.confirm("Reset all settings to defaults?")
             ) {
-              localStorage.removeItem("jinn-settings")
-              localStorage.removeItem("jinn-theme")
+              localStorage.removeItem("hundredfold-settings")
+              localStorage.removeItem("hundredfold-theme")
               resetAll()
               window.location.reload()
             }

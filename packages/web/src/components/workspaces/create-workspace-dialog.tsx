@@ -81,7 +81,7 @@ export function CreateWorkspaceDialog({
               className="mt-2 h-11 w-full rounded-[var(--radius-md)] border-0 bg-[var(--fill-secondary)] px-3 text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)] focus-visible:ring-2 focus-visible:ring-[var(--system-blue)]"
             />
             <p className="mt-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-              {PRODUCT_NAME} creates a private home such as <span style={{ fontFamily: "var(--font-code)" }}>~/.jinn-acme</span>, starts it, and opens onboarding.
+              {PRODUCT_NAME} creates a private home such as <span style={{ fontFamily: "var(--font-code)" }}>~/.hundredfold-acme</span>, starts it, and opens onboarding.
             </p>
             {error && <p role="alert" className="mt-3 text-[length:var(--text-footnote)] text-[var(--system-red)]">{error}</p>}
           </div>

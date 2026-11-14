@@ -27,27 +27,27 @@
 ## File map
 
 **Create**
-- `packages/jinn/src/work-items/workflow-ownership.ts` — newest bound `workflowId` from status events
-- `packages/jinn/src/work-items/recovery.ts` — incident identity, classification, attempt ledger
-- `packages/jinn/src/work-items/recovery-controller.ts` — bounded apply (or classify-only)
-- `packages/jinn/src/work-items/anomaly-detect.ts` — quiet detector
-- `packages/jinn/src/work-items/attention-lane.ts` — Recovering / Manager / Operator derivation
-- `packages/jinn/src/gateway/todo-recovery.ts` — gateway port: re-arm + employee routing without operator impersonation
+- `packages/hundredfold/src/work-items/workflow-ownership.ts` — newest bound `workflowId` from status events
+- `packages/hundredfold/src/work-items/recovery.ts` — incident identity, classification, attempt ledger
+- `packages/hundredfold/src/work-items/recovery-controller.ts` — bounded apply (or classify-only)
+- `packages/hundredfold/src/work-items/anomaly-detect.ts` — quiet detector
+- `packages/hundredfold/src/work-items/attention-lane.ts` — Recovering / Manager / Operator derivation
+- `packages/hundredfold/src/gateway/todo-recovery.ts` — gateway port: re-arm + employee routing without operator impersonation
 - matching `__tests__/` files next to each module
-- `packages/jinn/src/work-items/__tests__/self-healing-replay.test.ts` — historical incident table
-- `packages/jinn/src/work-items/__tests__/recovery-schema.test.ts` — additive table exact-shape
+- `packages/hundredfold/src/work-items/__tests__/self-healing-replay.test.ts` — historical incident table
+- `packages/hundredfold/src/work-items/__tests__/recovery-schema.test.ts` — additive table exact-shape
 
 **Modify (lifecycle, serialize)**
-- `packages/jinn/src/gateway/workflow-todo-surface.ts` — stale-run guard
-- `packages/jinn/src/work-items/availability-resume.ts` — weekly-reset age cap
-- `packages/jinn/src/gateway/availability-resume.ts` — stop operator impersonation; restore labels/assignee; use shared ownership
-- `packages/jinn/src/workflows/trigger-service.ts` — sticky owning workflow; accept recovery/availability resume stamps
-- `packages/jinn/src/work-items/event-log.ts` — new event kinds
-- `packages/jinn/src/work-items/migrate.ts` — register additive `work_item_recovery`
-- `packages/jinn/src/shared/config-types.ts` + `config.ts` — `gateway.todoRecovery`
-- `packages/jinn/src/gateway/server.ts` — start classify/apply sweep next to availability resume
-- `packages/jinn/src/gateway/work-item-payload.ts` — `attentionLane` on compact wire
-- `packages/jinn/src/work-items/store.ts` — `needsAttentionFor` includes recovering/manager leftovers so Attention/list grouping can split them; parked clock-waits without those lanes stay out
+- `packages/hundredfold/src/gateway/workflow-todo-surface.ts` — stale-run guard
+- `packages/hundredfold/src/work-items/availability-resume.ts` — weekly-reset age cap
+- `packages/hundredfold/src/gateway/availability-resume.ts` — stop operator impersonation; restore labels/assignee; use shared ownership
+- `packages/hundredfold/src/workflows/trigger-service.ts` — sticky owning workflow; accept recovery/availability resume stamps
+- `packages/hundredfold/src/work-items/event-log.ts` — new event kinds
+- `packages/hundredfold/src/work-items/migrate.ts` — register additive `work_item_recovery`
+- `packages/hundredfold/src/shared/config-types.ts` + `config.ts` — `gateway.todoRecovery`
+- `packages/hundredfold/src/gateway/server.ts` — start classify/apply sweep next to availability resume
+- `packages/hundredfold/src/gateway/work-item-payload.ts` — `attentionLane` on compact wire
+- `packages/hundredfold/src/work-items/store.ts` — `needsAttentionFor` includes recovering/manager leftovers so Attention/list grouping can split them; parked clock-waits without those lanes stay out
 
 **Modify (dashboard)**
 - `packages/web/src/lib/api.ts` — `attentionLane` on compact wire
@@ -57,16 +57,16 @@
 
 **Do not touch**
 - the COO land-gate files listed above
-- `packages/jinn/template/**` personalization
-- production `~/.jinn` workflow definitions in this PR (applying the deliver failure-End is rollout)
+- `packages/hundredfold/template/**` personalization
+- production `~/.hundredfold` workflow definitions in this PR (applying the deliver failure-End is rollout)
 
 ---
 
 ### Task 1: Historical-incident replay harness (tests first)
 
 **Files:**
-- Create: `packages/jinn/src/work-items/__tests__/self-healing-replay.test.ts`
-- Create: `packages/jinn/src/work-items/recovery.ts` (types + empty classify that fails tests)
+- Create: `packages/hundredfold/src/work-items/__tests__/self-healing-replay.test.ts`
+- Create: `packages/hundredfold/src/work-items/recovery.ts` (types + empty classify that fails tests)
 - Test: same
 
 **Interfaces:**
@@ -158,7 +158,7 @@ it("ordinary backlog never classifies as recovering", () => {
 
 - [ ] **Step 2: Run tests — they fail because `classifyRecovery` is missing**
 
-Run: `pnpm --filter @jinn/jinn exec vitest run src/work-items/__tests__/self-healing-replay.test.ts`
+Run: `pnpm --filter @hundredfold/hundredfold exec vitest run src/work-items/__tests__/self-healing-replay.test.ts`
 
 Expected: FAIL, cannot find `classifyRecovery` or it returns undefined.
 
@@ -168,8 +168,8 @@ Expected: FAIL, cannot find `classifyRecovery` or it returns undefined.
 
 ```bash
 git add docs/superpowers/plans/2026-08-24-self-healing-todos.md \
-  packages/jinn/src/work-items/recovery.ts \
-  packages/jinn/src/work-items/__tests__/self-healing-replay.test.ts
+  packages/hundredfold/src/work-items/recovery.ts \
+  packages/hundredfold/src/work-items/__tests__/self-healing-replay.test.ts
 git commit -m "$(cat <<'EOF'
 test(todos): replay historical self-healing incidents
 
@@ -185,9 +185,9 @@ EOF
 ### Task 2: Stale-run guard — stale failure End cannot stomp a newer state
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/workflow-todo-surface.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-todo-surface.test.ts`
-- Create: `packages/jinn/src/work-items/workflow-ownership.ts` if the runId check wants the shared event reader
+- Modify: `packages/hundredfold/src/gateway/workflow-todo-surface.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-todo-surface.test.ts`
+- Create: `packages/hundredfold/src/work-items/workflow-ownership.ts` if the runId check wants the shared event reader
 
 **Interfaces:**
 - Consumes: `listWorkItemEvents`, current Todo status, `input.runId`
@@ -297,8 +297,8 @@ EOF
 ### Task 3: Weekly-reset age cap — weekly-capped Todos resume after the real reset
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/availability-resume.ts`
-- Modify: `packages/jinn/src/work-items/__tests__/availability-resume.test.ts`
+- Modify: `packages/hundredfold/src/work-items/availability-resume.ts`
+- Modify: `packages/hundredfold/src/work-items/__tests__/availability-resume.test.ts`
 
 Current hole: `dueForResume` ages out when `now - endedAt > 24h`, so a weekly cap (true `until` ~6 days) never auto-resumes.
 
@@ -368,11 +368,11 @@ EOF
 ### Task 4: Sticky owning workflow, labels, assignee
 
 **Files:**
-- Create: `packages/jinn/src/work-items/workflow-ownership.ts`
-- Modify: `packages/jinn/src/gateway/availability-resume.ts` (use shared owner; restore extra labels; keep assignee)
-- Modify: `packages/jinn/src/workflows/trigger-service.ts`
-- Tests: `packages/jinn/src/gateway/__tests__/availability-resume.test.ts`
-- Tests: new `packages/jinn/src/workflows/__tests__/owning-workflow-rearm.test.ts`
+- Create: `packages/hundredfold/src/work-items/workflow-ownership.ts`
+- Modify: `packages/hundredfold/src/gateway/availability-resume.ts` (use shared owner; restore extra labels; keep assignee)
+- Modify: `packages/hundredfold/src/workflows/trigger-service.ts`
+- Tests: `packages/hundredfold/src/gateway/__tests__/availability-resume.test.ts`
+- Tests: new `packages/hundredfold/src/workflows/__tests__/owning-workflow-rearm.test.ts`
 
 **Interfaces:**
 
@@ -423,9 +423,9 @@ EOF
 ### Task 5: Honest terminal outcomes + approval/status reconciliation
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/workflow-todo-surface.ts` `complete()`
-- Tests: `packages/jinn/src/gateway/__tests__/workflow-todo-surface.test.ts`
-- Tests: generic deliver→failure-End fixture in `packages/jinn/src/workflows/__tests__/landing-evidence.test.ts` (the deliver failure-End pattern)
+- Modify: `packages/hundredfold/src/gateway/workflow-todo-surface.ts` `complete()`
+- Tests: `packages/hundredfold/src/gateway/__tests__/workflow-todo-surface.test.ts`
+- Tests: generic deliver→failure-End fixture in `packages/hundredfold/src/workflows/__tests__/landing-evidence.test.ts` (the deliver failure-End pattern)
 
 `complete()` today no-ops unless status is `in_review`. Acceptance: approved/landed work cannot remain indefinitely in_review. If the reserved gate approved and the run completed, close from `in_review`. If it is still `executing`/`assigned` because reflection lagged, move to `in_review` then close in the same function — but NEVER close from `blocked`. Do not change `approvedGate()` (the COO land-gate work owns that).
 
@@ -452,12 +452,12 @@ EOF
 ### Task 6: Recovery table + bounded controller
 
 **Files:**
-- Create: `packages/jinn/src/work-items/recovery.ts` (ledger + classify)
-- Create: `packages/jinn/src/work-items/recovery-controller.ts`
-- Create: `packages/jinn/src/gateway/todo-recovery.ts`
-- Modify: `packages/jinn/src/work-items/event-log.ts` kinds
-- Modify: `packages/jinn/src/work-items/migrate.ts`
-- Modify: `packages/jinn/src/shared/config-types.ts`, `config.ts`, `config.test.ts`
+- Create: `packages/hundredfold/src/work-items/recovery.ts` (ledger + classify)
+- Create: `packages/hundredfold/src/work-items/recovery-controller.ts`
+- Create: `packages/hundredfold/src/gateway/todo-recovery.ts`
+- Modify: `packages/hundredfold/src/work-items/event-log.ts` kinds
+- Modify: `packages/hundredfold/src/work-items/migrate.ts`
+- Modify: `packages/hundredfold/src/shared/config-types.ts`, `config.ts`, `config.test.ts`
 - Tests: `recovery.test.ts`, `recovery-controller.test.ts`, `recovery-schema.test.ts`
 
 **DDL (additive, never a column on `work_items`):**
@@ -527,8 +527,8 @@ EOF
 ### Task 7: Quiet anomaly detector
 
 **Files:**
-- Create: `packages/jinn/src/work-items/anomaly-detect.ts`
-- Tests: `packages/jinn/src/work-items/__tests__/anomaly-detect.test.ts`
+- Create: `packages/hundredfold/src/work-items/anomaly-detect.ts`
+- Tests: `packages/hundredfold/src/work-items/__tests__/anomaly-detect.test.ts`
 
 **Interfaces:**
 
@@ -579,7 +579,7 @@ EOF
 ### Task 8: Dashboard lanes
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/work-item-payload.ts`
+- Modify: `packages/hundredfold/src/gateway/work-item-payload.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/todos/list/group-items.ts`
 - Modify: `packages/web/src/routes/todos/needs-you-support.ts`
@@ -621,8 +621,8 @@ EOF
 ### Task 9: Gateway sweep, metrics, rollout docs
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/server.ts`
-- Create: `packages/jinn/src/gateway/todo-recovery.ts` start/stop
+- Modify: `packages/hundredfold/src/gateway/server.ts`
+- Create: `packages/hundredfold/src/gateway/todo-recovery.ts` start/stop
 - Modify: plan / this file's rollout section is the operator-facing source of truth
 
 Start an unref'd interval next to `startAvailabilityResumes`. One sweep: classify + anomalies + (if auto) apply. Never overlap ticks. Default classify-only.

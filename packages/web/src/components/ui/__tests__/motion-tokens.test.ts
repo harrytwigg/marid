@@ -119,7 +119,7 @@ describe("motion tokens", () => {
   it("animates the overlay keyframes on opacity and the independent transform properties only", () => {
     // A keyframe writing `transform` would overwrite the Tailwind translate that
     // centres a dialog and throw it into a corner mid-animation.
-    for (const name of ["jinn-overlay-in", "jinn-overlay-out", "jinn-pop-in", "jinn-pop-out", "jinn-sheet-in", "jinn-sheet-out"]) {
+    for (const name of ["hundredfold-overlay-in", "hundredfold-overlay-out", "hundredfold-pop-in", "hundredfold-pop-out", "hundredfold-sheet-in", "hundredfold-sheet-out"]) {
       const body = keyframeBody(name)
       expect(body, name).not.toContain("transform:")
       for (const property of body.matchAll(/([a-z-]+):/g)) {
@@ -130,10 +130,10 @@ describe("motion tokens", () => {
 
   it("routes the view transition and the nav chrome through the tokens", () => {
     expect(GLOBALS).toMatch(/::view-transition-new\(root\)[\s\S]*?animation-duration: var\(--duration-base\)/)
-    expect(GLOBALS).toContain("::view-transition-new(jinn-nav-rail)")
-    expect(GLOBALS).toContain("::view-transition-new(jinn-tab-bar)")
-    expect(source("components/pill-nav.tsx")).toContain("[view-transition-name:jinn-nav-rail]")
-    expect(source("components/chat/mobile-tab-bar.tsx")).toContain("[view-transition-name:jinn-tab-bar]")
+    expect(GLOBALS).toContain("::view-transition-new(hundredfold-nav-rail)")
+    expect(GLOBALS).toContain("::view-transition-new(hundredfold-tab-bar)")
+    expect(source("components/pill-nav.tsx")).toContain("[view-transition-name:hundredfold-nav-rail]")
+    expect(source("components/chat/mobile-tab-bar.tsx")).toContain("[view-transition-name:hundredfold-tab-bar]")
   })
 
   it("asks React Router for a view transition on every nav link", () => {

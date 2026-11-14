@@ -109,8 +109,8 @@ describe('the opencode internal fallback warning', () => {
     const warning = document.querySelector('[data-engine-card="opencode"] [data-opencode-internal-fallback]')!
     expect(warning.getAttribute('data-opencode-internal-fallback')).toBe('active')
     expect((warning.querySelector('a') as HTMLAnchorElement).href).toContain('docs/fallback-chains.md#migrating-a-host')
-    // The way out: the migration, then `jinn doctor`; the operator's own paths are never shown.
-    expect(warning.querySelector('[data-opencode-doctor]')?.textContent).toBe('jinn doctor')
+    // The way out: the migration, then `hundredfold doctor`; the operator's own paths are never shown.
+    expect(warning.querySelector('[data-opencode-doctor]')?.textContent).toBe('hundredfold doctor')
     expect(warning.textContent).not.toContain('/home/op')
   })
 

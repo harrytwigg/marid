@@ -109,7 +109,7 @@
         userAgent: navigator.userAgent,
         // The shell injects this global; the PWA does not. It is how the two runs
         // are told apart after the fact.
-        nativeShell: window.__JINN_NATIVE__?.runtime === 'tauri',
+        nativeShell: window.__HUNDREDFOLD_NATIVE__?.runtime === 'tauri',
         devicePixelRatio: window.devicePixelRatio,
         distancePx: DISTANCE_PX,
         targetDurationMs: DURATION_MS,

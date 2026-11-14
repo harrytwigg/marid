@@ -132,19 +132,19 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
       return
     }
     // If localStorage says onboarded, trust it (fast path)
-    if (typeof window !== "undefined" && localStorage.getItem("jinn-onboarded")) {
+    if (typeof window !== "undefined" && localStorage.getItem("hundredfold-onboarded")) {
       return
     }
     // Otherwise check server — the onboarded flag persists across browsers
     api.getOnboarding().then((data) => {
       if (data.onboarded) {
-        localStorage.setItem("jinn-onboarded", "true")
+        localStorage.setItem("hundredfold-onboarded", "true")
       } else if (data.needed) {
         setVisible(true)
       }
     }).catch(() => {
       // Fallback: show wizard if we can't reach the server and no localStorage flag
-      if (!localStorage.getItem("jinn-onboarded")) {
+      if (!localStorage.getItem("hundredfold-onboarded")) {
         setVisible(true)
       }
     })
@@ -216,7 +216,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
           effortLevel: engineChoice.effortLevel,
         })
         if (!forceOpen) {
-          localStorage.setItem("jinn-onboarded", "true")
+          localStorage.setItem("hundredfold-onboarded", "true")
         }
         // Create the COO session, then show the branded loading bridge while
         // the chat route mounts (so there is never a blank screen).
@@ -240,7 +240,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
           // Store the seed so ChatPane can display it (and arm loading=true) the
           // moment it mounts — before useLiveSession's first fetch returns.
           try {
-            sessionStorage.setItem("jinn-onboarding-seed", JSON.stringify({
+            sessionStorage.setItem("hundredfold-onboarding-seed", JSON.stringify({
               sessionId: launchSessionId,
               message: { id: crypto.randomUUID(), role: "user", content: seed, timestamp: Date.now() },
             }))

@@ -54,7 +54,7 @@ export function StateLine({ state, dispatchedAt, repliedAt, label, className = '
       {state === 'working' && (
         <span
           aria-hidden="true"
-          className="size-1.5 shrink-0 rounded-full bg-[var(--system-blue)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none"
+          className="size-1.5 shrink-0 rounded-full bg-[var(--system-blue)] animate-[hundredfold-pulse_1.4s_infinite] motion-reduce:animate-none"
         />
       )}
       {state === 'waiting' && (

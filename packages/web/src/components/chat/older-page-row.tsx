@@ -12,7 +12,7 @@ export function OlderPageRow({ loading, error }: { loading: boolean; error: Erro
   return (
     <div className="flex h-8 items-center justify-center">
       {loading && (
-        <span role="status" aria-label="Loading older messages" className="size-3 rounded-full bg-[var(--fill-tertiary)] animate-[jinn-pulse_1.4s_infinite]" />
+        <span role="status" aria-label="Loading older messages" className="size-3 rounded-full bg-[var(--fill-tertiary)] animate-[hundredfold-pulse_1.4s_infinite]" />
       )}
       {!loading && error && (
         <span className="text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">

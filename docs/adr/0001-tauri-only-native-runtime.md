@@ -6,7 +6,7 @@
 
 ## Context
 
-Jinn previously carried separate desktop and iOS shell packages. That split
+Hundredfold previously carried separate desktop and iOS shell packages. That split
 duplicated runtime detection, build systems, application metadata, and security
 assumptions. The iOS shell also loaded a gateway page remotely, which made the
 gateway origin both UI host and data authority.

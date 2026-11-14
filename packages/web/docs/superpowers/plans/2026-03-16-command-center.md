@@ -23,7 +23,7 @@ These corrections apply across the plan. The implementer MUST follow these over 
 3. **Session mutation**: Use `updateSession(id, updates)` from `../sessions/registry.js` - NOT direct property assignment on the session object.
 4. **`serializeSession` signature**: Second argument is the full `ApiContext` (context) - NOT just `sessionManager`.
 5. **YAML parsing**: Use `import yaml from 'js-yaml'` (already imported in the file) with `yaml.load(content)` - NOT `require('yaml')` with `yaml.parse()`.
-6. **Data dir path**: Extract `const dataDir = context.getConfig().dataDir || path.join(os.homedir(), '.jinn')` once at the top of the handler, not repeated in every route.
+6. **Data dir path**: Extract `const dataDir = context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold')` once at the top of the handler, not repeated in every route.
 
 ### Web API client (affects Chunk 3)
 
@@ -52,13 +52,13 @@ These corrections apply across the plan. The implementer MUST follow these over 
 
 ## File Structure
 
-### Gateway (`packages/jinn/src/`)
+### Gateway (`packages/hundredfold/src/`)
 
 | File | Action | Responsibility |
 |------|--------|---------------|
 | `shared/types.ts` | Modify | Add `Project`, `Task`, `ProjectWithStats` interfaces; extend `Session` with `projects`, `attentionRequired`, `priority` fields; extend `CronJob` with `attentionRequired`, `defaultPriority` |
-| `gateway/projects.ts` | Create | Project CRUD: `loadProjects()`, `saveProjects()`, `getProjectStats()` - JSON file I/O for `~/.jinn/projects.json` |
-| `gateway/tasks.ts` | Create | Task CRUD: `loadTasks()`, `saveTasks()` - JSON file I/O for `~/.jinn/tasks.json` |
+| `gateway/projects.ts` | Create | Project CRUD: `loadProjects()`, `saveProjects()`, `getProjectStats()` - JSON file I/O for `~/.hundredfold/projects.json` |
+| `gateway/tasks.ts` | Create | Task CRUD: `loadTasks()`, `saveTasks()` - JSON file I/O for `~/.hundredfold/tasks.json` |
 | `gateway/project-tagger.ts` | Create | `autoTagSession()` - one-shot auto-tagging logic (5-step waterfall) |
 | `gateway/api.ts` | Modify | Add routes: PATCH sessions, CRUD projects, CRUD tasks |
 | `cron/runner.ts` | Modify | Propagate `attentionRequired` + `defaultPriority` from job to spawned session |
@@ -94,7 +94,7 @@ These corrections apply across the plan. The implementer MUST follow these over 
 ### Task 1.1: Extend shared types
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
 
 - [ ] **Step 1: Add Project interface**
 
@@ -165,22 +165,22 @@ Find the `CronJob` interface/type and add:
 
 - [ ] **Step 5: Verify build compiles**
 
-Run: `cd ~/Projects/jinn && npm run build --workspace=packages/jinn 2>&1 | head -30`
+Run: `cd ~/Projects/hundredfold && npm run build --workspace=packages/hundredfold 2>&1 | head -30`
 
 Fix any type errors in existing code that now requires the new Session fields. Existing session creation code should default to `projects: []`, `attentionRequired: false`, `priority: null`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/shared/types.ts
+git add packages/hundredfold/src/shared/types.ts
 git commit -m "feat(types): add Project, Task interfaces and extend Session with priority/attention fields"
 ```
 
 ### Task 1.2: Project storage module
 
 **Files:**
-- Create: `packages/jinn/src/gateway/projects.ts`
-- Create: `packages/jinn/src/gateway/projects.test.ts`
+- Create: `packages/hundredfold/src/gateway/projects.ts`
+- Create: `packages/hundredfold/src/gateway/projects.test.ts`
 
 - [ ] **Step 1: Write failing tests for project CRUD**
 
@@ -193,7 +193,7 @@ import os from 'node:os'
 import { loadProjects, saveProjects, createProject, updateProject, deleteProject } from './projects.js'
 
 test('loadProjects returns empty array when file does not exist', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jinn-test-'))
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hundredfold-test-'))
   const filePath = path.join(tmpDir, 'projects.json')
   const result = loadProjects(filePath)
   assert.deepEqual(result, [])
@@ -201,7 +201,7 @@ test('loadProjects returns empty array when file does not exist', () => {
 })
 
 test('saveProjects writes and loadProjects reads back', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jinn-test-'))
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hundredfold-test-'))
   const filePath = path.join(tmpDir, 'projects.json')
   const projects = [{ id: 'project-a', name: 'Project A', color: '#3b82f6', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }]
   saveProjects(projects, filePath)
@@ -247,7 +247,7 @@ test('deleteProject removes from array', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/projects.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/projects.test.ts`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement projects.ts**
@@ -307,21 +307,21 @@ export function deleteProject(projects: Project[], id: string): Project[] {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/projects.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/projects.test.ts`
 Expected: All 6 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/projects.ts packages/jinn/src/gateway/projects.test.ts
+git add packages/hundredfold/src/gateway/projects.ts packages/hundredfold/src/gateway/projects.test.ts
 git commit -m "feat(gateway): add project storage module with CRUD and tests"
 ```
 
 ### Task 1.3: Task storage module
 
 **Files:**
-- Create: `packages/jinn/src/gateway/tasks.ts`
-- Create: `packages/jinn/src/gateway/tasks.test.ts`
+- Create: `packages/hundredfold/src/gateway/tasks.ts`
+- Create: `packages/hundredfold/src/gateway/tasks.test.ts`
 
 - [ ] **Step 1: Write failing tests for task CRUD**
 
@@ -334,7 +334,7 @@ import os from 'node:os'
 import { loadTasks, saveTasks, createTask, updateTask, deleteTask } from './tasks.js'
 
 test('loadTasks returns empty array when file does not exist', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jinn-test-'))
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hundredfold-test-'))
   const filePath = path.join(tmpDir, 'tasks.json')
   const result = loadTasks(filePath)
   assert.deepEqual(result, [])
@@ -379,7 +379,7 @@ test('deleteTask removes by id', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/tasks.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/tasks.test.ts`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement tasks.ts**
@@ -443,21 +443,21 @@ export function deleteTask(tasks: Task[], id: string): Task[] {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/tasks.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/tasks.test.ts`
 Expected: All 5 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/tasks.ts packages/jinn/src/gateway/tasks.test.ts
+git add packages/hundredfold/src/gateway/tasks.ts packages/hundredfold/src/gateway/tasks.test.ts
 git commit -m "feat(gateway): add task storage module with CRUD, blocked auto-attention, and tests"
 ```
 
 ### Task 1.4: Auto-tagger module
 
 **Files:**
-- Create: `packages/jinn/src/gateway/project-tagger.ts`
-- Create: `packages/jinn/src/gateway/project-tagger.test.ts`
+- Create: `packages/hundredfold/src/gateway/project-tagger.ts`
+- Create: `packages/hundredfold/src/gateway/project-tagger.test.ts`
 
 - [ ] **Step 1: Write failing tests for auto-tagging**
 
@@ -527,7 +527,7 @@ test('does not duplicate tags', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/project-tagger.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/project-tagger.test.ts`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement project-tagger.ts**
@@ -614,13 +614,13 @@ export function autoTagSession(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/project-tagger.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/project-tagger.test.ts`
 Expected: All 7 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/project-tagger.ts packages/jinn/src/gateway/project-tagger.test.ts
+git add packages/hundredfold/src/gateway/project-tagger.ts packages/hundredfold/src/gateway/project-tagger.test.ts
 git commit -m "feat(gateway): add auto-tagger module with 5-step waterfall and tests"
 ```
 
@@ -631,7 +631,7 @@ git commit -m "feat(gateway): add auto-tagger module with 5-step waterfall and t
 ### Task 2.1: Add `patch` helper and project stats computation
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 
 - [ ] **Step 1: Add PATCH /api/sessions/:id route**
 
@@ -664,8 +664,8 @@ Add after the session routes:
 if (pathname === '/api/projects' && req.method === 'GET') {
   const { loadProjects } = await import('./projects.js')
   const { loadTasks } = await import('./tasks.js')
-  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'projects.json')
-  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'tasks.json')
+  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'projects.json')
+  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'tasks.json')
   const projects = loadProjects(projectsPath)
   const tasks = loadTasks(tasksPath)
   const sessions = context.sessionManager.listSessions()
@@ -697,7 +697,7 @@ if (pathname === '/api/projects' && req.method === 'POST') {
   const { ok, body } = await readJsonBody(req, res)
   if (!ok) return
   const { loadProjects, saveProjects, createProject } = await import('./projects.js')
-  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'projects.json')
+  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'projects.json')
   const projects = loadProjects(projectsPath)
   const project = createProject(body)
   projects.push(project)
@@ -712,7 +712,7 @@ if (putProject && req.method === 'PUT') {
   const { ok, body } = await readJsonBody(req, res)
   if (!ok) return
   const { loadProjects, saveProjects, updateProject } = await import('./projects.js')
-  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'projects.json')
+  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'projects.json')
   const projects = loadProjects(projectsPath)
   const idx = projects.findIndex(p => p.id === putProject.id)
   if (idx === -1) return notFound(res)
@@ -726,7 +726,7 @@ if (putProject && req.method === 'PUT') {
 const delProject = matchRoute('/api/projects/:id', pathname)
 if (delProject && req.method === 'DELETE') {
   const { loadProjects, saveProjects, deleteProject } = await import('./projects.js')
-  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'projects.json')
+  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'projects.json')
   const projects = loadProjects(projectsPath)
   const filtered = deleteProject(projects, delProject.id)
   saveProjects(filtered, projectsPath)
@@ -743,7 +743,7 @@ if (delProject && req.method === 'DELETE') {
 const getProjectTasks = matchRoute('/api/projects/:id/tasks', pathname)
 if (getProjectTasks && req.method === 'GET') {
   const { loadTasks } = await import('./tasks.js')
-  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'tasks.json')
+  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'tasks.json')
   const tasks = loadTasks(tasksPath)
   return json(res, tasks.filter(t => t.projectId === getProjectTasks.id))
 }
@@ -754,7 +754,7 @@ if (postProjectTasks && req.method === 'POST') {
   const { ok, body } = await readJsonBody(req, res)
   if (!ok) return
   const { loadTasks, saveTasks, createTask } = await import('./tasks.js')
-  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'tasks.json')
+  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'tasks.json')
   const tasks = loadTasks(tasksPath)
   const task = createTask({ ...body, projectId: postProjectTasks.id })
   tasks.push(task)
@@ -769,7 +769,7 @@ if (putTask && req.method === 'PUT') {
   const { ok, body } = await readJsonBody(req, res)
   if (!ok) return
   const { loadTasks, saveTasks, updateTask } = await import('./tasks.js')
-  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'tasks.json')
+  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'tasks.json')
   const tasks = loadTasks(tasksPath)
   const idx = tasks.findIndex(t => t.id === putTask.id)
   if (idx === -1) return notFound(res)
@@ -783,7 +783,7 @@ if (putTask && req.method === 'PUT') {
 const delTask = matchRoute('/api/tasks/:id', pathname)
 if (delTask && req.method === 'DELETE') {
   const { loadTasks, saveTasks, deleteTask } = await import('./tasks.js')
-  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'tasks.json')
+  const tasksPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'tasks.json')
   const tasks = loadTasks(tasksPath)
   const filtered = deleteTask(tasks, delTask.id)
   saveTasks(filtered, tasksPath)
@@ -795,21 +795,21 @@ if (delTask && req.method === 'DELETE') {
 
 - [ ] **Step 4: Verify gateway compiles**
 
-Run: `cd ~/Projects/jinn && npm run build --workspace=packages/jinn 2>&1 | head -30`
+Run: `cd ~/Projects/hundredfold && npm run build --workspace=packages/hundredfold 2>&1 | head -30`
 Expected: No errors
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): add project/task CRUD routes and session PATCH for priority/attention"
 ```
 
 ### Task 2.2: Integrate auto-tagger into session creation
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts` (session creation section)
-- Modify: `packages/jinn/src/cron/runner.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts` (session creation section)
+- Modify: `packages/hundredfold/src/cron/runner.ts`
 
 - [ ] **Step 1: Hook auto-tagger into POST /api/sessions**
 
@@ -820,7 +820,7 @@ In the `POST /api/sessions` handler, after the session is created but before the
 if (!session.projects || session.projects.length === 0) {
   const { loadProjects } = await import('./projects.js')
   const { autoTagSession } = await import('./project-tagger.js')
-  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.jinn'), 'projects.json')
+  const projectsPath = path.join(context.getConfig().dataDir || path.join(os.homedir(), '.hundredfold'), 'projects.json')
   const projects = loadProjects(projectsPath)
   const orgDeptMap = buildOrgDeptMap(context.getConfig())
   const sessionProjectsMap = buildSessionProjectsMap(context.sessionManager)
@@ -831,10 +831,10 @@ if (!session.projects || session.projects.length === 0) {
 Also add two helper functions near the top of api.ts:
 
 ```typescript
-function buildOrgDeptMap(config: JinnConfig): Record<string, string> {
+function buildOrgDeptMap(config: HundredfoldConfig): Record<string, string> {
   const map: Record<string, string> = {}
   // Read org files to build employee → department mapping
-  const orgDir = path.join(os.homedir(), '.jinn', 'org')
+  const orgDir = path.join(os.homedir(), '.hundredfold', 'org')
   try {
     const files = fs.readdirSync(orgDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
     for (const file of files) {
@@ -877,13 +877,13 @@ Ensure the session created by `sessionManager.route()` picks up these fields.
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd ~/Projects/jinn && npm run build --workspace=packages/jinn 2>&1 | head -30`
+Run: `cd ~/Projects/hundredfold && npm run build --workspace=packages/hundredfold 2>&1 | head -30`
 Expected: No errors
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/cron/runner.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/cron/runner.ts
 git commit -m "feat(gateway): integrate auto-tagger into session creation and cron attention propagation"
 ```
 
@@ -1102,9 +1102,9 @@ import type { ProjectWithStats, Task, DecayFilter, CommandTab } from './types'
 import { DEFAULT_DECAY_FILTER } from './utils'
 
 const STORAGE_KEYS = {
-  decayFilter: 'jinn-decay-filter',
-  activeTab: 'jinn-command-tab',
-  graphPositions: 'jinn-graph-positions',
+  decayFilter: 'hundredfold-decay-filter',
+  activeTab: 'hundredfold-command-tab',
+  graphPositions: 'hundredfold-graph-positions',
 }
 
 export function useProjects() {
@@ -1506,7 +1506,7 @@ export default function CommandCenterPage() {
 
 - [ ] **Step 4: Verify page loads**
 
-Run: `cd ~/Projects/jinn && npm run dev --workspace=packages/web`
+Run: `cd ~/Projects/hundredfold && npm run dev --workspace=packages/web`
 Navigate to `/command` - should see the page shell with tab buttons and filter.
 
 - [ ] **Step 5: Commit**
@@ -1678,7 +1678,7 @@ git commit -m "feat(web): add Dashboard view with project cards, status indicato
 
 - [ ] **Step 1: Install dependency**
 
-Run: `cd ~/Projects/jinn/packages/web && npm install @xyflow/react`
+Run: `cd ~/Projects/hundredfold/packages/web && npm install @xyflow/react`
 
 - [ ] **Step 2: Commit**
 
@@ -2727,7 +2727,7 @@ git commit -m "feat(web): apply smart decay filter to Command Center session vie
 ### Task 8.4: Seed default projects from org departments
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts` (or create a startup migration)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (or create a startup migration)
 
 - [ ] **Step 1: Add project seeding on first load**
 
@@ -2736,7 +2736,7 @@ In the `GET /api/projects` handler, if the projects file doesn't exist or is emp
 ```typescript
 // After loading projects, if empty, seed from org
 if (projects.length === 0) {
-  const orgDir = path.join(os.homedir(), '.jinn', 'org')
+  const orgDir = path.join(os.homedir(), '.hundredfold', 'org')
   const departments = new Set<string>()
   try {
     const files = fs.readdirSync(orgDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
@@ -2762,12 +2762,12 @@ if (projects.length === 0) {
 
 - [ ] **Step 2: Verify seeding works**
 
-Delete `~/.jinn/projects.json` if it exists. Hit `GET /api/projects`. Should return projects auto-created from org departments.
+Delete `~/.hundredfold/projects.json` if it exists. Hit `GET /api/projects`. Should return projects auto-created from org departments.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): auto-seed projects from org departments on first load"
 ```
 
@@ -2775,18 +2775,18 @@ git commit -m "feat(gateway): auto-seed projects from org departments on first l
 
 - [ ] **Step 1: Run all gateway tests**
 
-Run: `cd ~/Projects/jinn && node --test packages/jinn/src/gateway/projects.test.ts packages/jinn/src/gateway/tasks.test.ts packages/jinn/src/gateway/project-tagger.test.ts`
+Run: `cd ~/Projects/hundredfold && node --test packages/hundredfold/src/gateway/projects.test.ts packages/hundredfold/src/gateway/tasks.test.ts packages/hundredfold/src/gateway/project-tagger.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 2: Run full build**
 
-Run: `cd ~/Projects/jinn && npm run build 2>&1 | tail -20`
+Run: `cd ~/Projects/hundredfold && npm run build 2>&1 | tail -20`
 Expected: No errors
 
 - [ ] **Step 3: End-to-end manual smoke test**
 
-1. Start gateway: `cd ~/Projects/jinn && npm run dev --workspace=packages/jinn`
-2. Start web: `cd ~/Projects/jinn && npm run dev --workspace=packages/web`
+1. Start gateway: `cd ~/Projects/hundredfold && npm run dev --workspace=packages/hundredfold`
+2. Start web: `cd ~/Projects/hundredfold && npm run dev --workspace=packages/web`
 3. Navigate to `/command`
 4. Verify: Graph view shows project nodes, draggable, positions persist
 5. Verify: Dashboard view shows project cards, sorted by attention

@@ -1,0 +1,423 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Readable } from "node:stream";
+import type { ServerResponse } from "node:http";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { Engine, EngineResult, EngineRunOpts, StreamDelta } from "../../shared/types.js";
+
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-streamed-settlement-"));
+process.env.HUNDREDFOLD_HOME = home;
+
+type Api = typeof import("../api.js");
+type Registry = typeof import("../../sessions/registry.js");
+
+let api: Api;
+let registry: Registry;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+function makeRes() {
+  let status = 200;
+  const chunks: Buffer[] = [];
+  const res = {
+    writeHead(code: number) { status = code; return this; },
+    setHeader() { return this; },
+    getHeader() { return undefined; },
+    end(chunk?: Buffer | string) {
+      if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    },
+  } as unknown as ServerResponse;
+  return {
+    res,
+    get status() { return status; },
+    get body() {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      return raw ? JSON.parse(raw) : null;
+    },
+  };
+}
+
+async function request(
+  context: import("../api.js").ApiContext,
+  method: string,
+  url: string,
+  body?: unknown,
+) {
+  const req = Object.assign(
+    Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]),
+    {
+      method,
+      url,
+      headers: {
+        host: "gateway.test",
+        authorization: "Bearer test-token",
+        "content-type": "application/json",
+      },
+    },
+  );
+  const cap = makeRes();
+  await api.handleApiRequest(req as unknown as Parameters<Api["handleApiRequest"]>[0], cap.res, context);
+  return cap;
+}
+
+async function waitForSettlement(sessionId: string) {
+  for (let i = 0; i < 2000; i++) {
+    const session = registry.getSession(sessionId);
+    if (session && session.status !== "running") return session;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`session ${sessionId} did not settle`);
+}
+
+async function runTurn(
+  deltas: StreamDelta[],
+  result: EngineResult,
+): Promise<{ context: import("../api.js").ApiContext; sessionId: string; reload: Record<string, unknown> }> {
+  const engine: Engine = {
+    name: "codex",
+    run: async (opts: EngineRunOpts) => {
+      for (const delta of deltas) opts.onStream?.(delta);
+      return result;
+    },
+  };
+  const queue = new (await import("../../sessions/queue.js")).SessionQueue();
+  const context = {
+    getConfig: () => ({
+      gateway: {},
+      engines: { default: "codex", codex: { bin: "codex", model: "gpt-test" } },
+      models: { codex: { default: "gpt-test", models: [{ id: "gpt-test", label: "Test" }] } },
+      sessions: {},
+      mcp: { gateway: { enabled: false }, browser: { enabled: false } },
+    }),
+    connectors: new Map(),
+    startTime: Date.now(),
+    gatewayAuthToken: "test-token",
+    emit: () => {},
+    sessionManager: {
+      getEngine: () => engine,
+      getEngines: () => new Map([["codex", engine]]),
+      getQueue: () => queue,
+    },
+  } as unknown as import("../api.js").ApiContext;
+
+  const created = await request(context, "POST", "/api/sessions", {
+    prompt: "perform the task",
+    engine: "codex",
+  });
+  expect(created.status).toBe(201);
+  const sessionId = created.body.id as string;
+  await waitForSettlement(sessionId);
+  const reloaded = await request(context, "GET", `/api/sessions/${sessionId}`);
+  expect(reloaded.status).toBe(200);
+  return { context, sessionId, reload: reloaded.body as Record<string, unknown> };
+}
+
+function normalizedRows(reload: Record<string, unknown>) {
+  return (reload.messages as Array<Record<string, unknown>>).map((message) => ({
+    role: message.role,
+    content: message.content,
+    partial: message.partial === true,
+    toolCall: message.toolCall,
+    blockTypes: Array.isArray(message.blocks)
+      ? (message.blocks as Array<Record<string, unknown>>).map((block) => block.type)
+      : [],
+  }));
+}
+
+beforeAll(async () => {
+  api = await import("../api.js");
+  registry = await import("../../sessions/registry.js");
+  (await import("../../shared/db.js")).initDb();
+}, 60_000);
+
+beforeEach(async () => {
+  (await import("../../shared/db.js")).initDb().exec("DELETE FROM queue_items; DELETE FROM messages; DELETE FROM sessions;");
+});
+
+describe("completed streamed-turn settlement", () => {
+  it("persists interleaved receipt metadata on the exact matching tool rows through reload", async () => {
+    const { reload } = await runTurn([
+      { type: "tool_use", content: "Search", toolName: "Search", toolId: "call-1" },
+      { type: "tool_use", content: "Search", toolName: "Search", toolId: "call-2" },
+      { type: "tool_result", content: "ok", toolName: "Search", toolId: "call-1", activityReceiptId: "todo:wi_one" },
+      { type: "tool_result", content: "ok", toolName: "Search", toolId: "call-2", activityReceiptId: "todo:wi_two" },
+    ], { sessionId: "engine-correlated", result: "Done." });
+
+    const tools = (reload.messages as Array<Record<string, unknown>>)
+      .filter((message) => message.toolCall === "Search");
+    expect(tools).toHaveLength(2);
+    expect(tools.map((message) => ({ toolId: message.toolId, meta: message.meta }))).toEqual([
+      { toolId: "call-1", meta: { activityReceiptId: "todo:wi_one" } },
+      { toolId: "call-2", meta: { activityReceiptId: "todo:wi_two" } },
+    ]);
+  });
+
+  it("falls back to the most recent open same-name tool rather than one global last tool", async () => {
+    const { reload } = await runTurn([
+      { type: "tool_use", content: "Search", toolName: "Search" },
+      { type: "tool_use", content: "Read", toolName: "Read" },
+      { type: "tool_result", content: "ok", toolName: "Search", activityReceiptId: "todo:wi_search" },
+    ], { sessionId: "engine-name-fallback", result: "Done." });
+
+    const messages = reload.messages as Array<Record<string, unknown>>;
+    expect(messages.find((message) => message.toolCall === "Search")).toMatchObject({
+      content: "Used Search",
+      meta: { activityReceiptId: "todo:wi_search" },
+    });
+    expect(messages.find((message) => message.toolCall === "Read")).toMatchObject({ content: "Using Read" });
+  });
+
+  it("reloads the same completed fold membership as the live web completion path", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "Inspecting the workspace." },
+      { type: "tool_use", content: "Bash", toolName: "Bash" },
+      { type: "tool_result", content: "ok", toolName: "Bash" },
+      {
+        type: "block",
+        content: "Temporary plan",
+        block: {
+          op: "put",
+          block: {
+            id: "plan",
+            type: "task-list",
+            version: 1,
+            payload: { items: [{ id: "step", text: "Inspect", status: "done" }] },
+          },
+        },
+      },
+      {
+        type: "block",
+        content: "Delegated verification",
+        block: {
+          op: "put",
+          block: {
+            id: "handoff",
+            type: "delegation",
+            version: 1,
+            payload: {
+              employee: "qa-lead",
+              employeeDisplay: "QA Lead",
+              title: "Verify the change",
+              childSessionId: "child-session",
+              workItemId: "work-item",
+              dispatchedAt: 1,
+            },
+          },
+        },
+      },
+      { type: "text", content: "Verification returned clean." },
+    ], { sessionId: "engine-1", result: "Completed successfully." });
+
+    expect(normalizedRows(reload)).toEqual([
+      { role: "user", content: "perform the task", partial: false, toolCall: undefined, blockTypes: [] },
+      { role: "assistant", content: "Inspecting the workspace.", partial: false, toolCall: undefined, blockTypes: [] },
+      { role: "assistant", content: "Used Bash", partial: false, toolCall: "Bash", blockTypes: [] },
+      { role: "assistant", content: "Delegated verification", partial: false, toolCall: undefined, blockTypes: ["delegation"] },
+      { role: "assistant", content: "Verification returned clean.", partial: false, toolCall: undefined, blockTypes: [] },
+      { role: "assistant", content: "Completed successfully.", partial: false, toolCall: undefined, blockTypes: [] },
+    ]);
+  });
+
+  it("dedupes one exact streamed result row but keeps the canonical final after tool evidence", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "FINAL ANSWER" },
+      { type: "tool_use", content: "Bash", toolName: "Bash" },
+      { type: "tool_result", content: "ok", toolName: "Bash" },
+    ], { sessionId: "engine-2", result: "FINAL ANSWER" });
+
+    expect(normalizedRows(reload).map(({ content }) => content)).toEqual([
+      "perform the task",
+      "Used Bash",
+      "FINAL ANSWER",
+    ]);
+  });
+
+  it("keeps concatenating prose fragments as evidence and appends the canonical full result", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "first" },
+      { type: "tool_use", content: "Read", toolName: "Read" },
+      { type: "tool_result", content: "ok", toolName: "Read" },
+      { type: "text", content: "final" },
+    ], { sessionId: "engine-3", result: "first final" });
+
+    expect(normalizedRows(reload).map(({ content }) => content)).toEqual([
+      "perform the task",
+      "first",
+      "Used Read",
+      "final",
+      "first final",
+    ]);
+  });
+
+  it("does not manufacture a final boundary for a result-less completion", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "unfinished prose" },
+      { type: "tool_use", content: "Read", toolName: "Read" },
+    ], { sessionId: "engine-empty", result: "" });
+
+    expect(normalizedRows(reload)).toEqual([
+      { role: "user", content: "perform the task", partial: false, toolCall: undefined, blockTypes: [] },
+    ]);
+  });
+
+  it("preserves completed evidence before a canonical terminal error row", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "Checking the failing operation." },
+      { type: "tool_use", content: "Read", toolName: "Read" },
+      { type: "tool_result", content: "failed", toolName: "Read" },
+    ], { sessionId: "engine-error", result: "", error: "operation failed" });
+
+    expect(normalizedRows(reload).map(({ content }) => content)).toEqual([
+      "perform the task",
+      "Checking the failing operation.",
+      "Used Read",
+      "Error: operation failed",
+    ]);
+  });
+
+  it("a sub-agent's call landing mid-answer neither splits the answer nor repeats it", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "Started the audit in the background. " },
+      { type: "tool_use", content: "Grep", toolName: "Grep", toolId: "sub-1", sidechain: true },
+      { type: "tool_result", content: "ok", toolName: "Grep", toolId: "sub-1" },
+      { type: "text", content: "I will report back when it finishes." },
+    ], { sessionId: "engine-sidechain", result: "Started the audit in the background. I will report back when it finishes." });
+
+    expect(normalizedRows(reload).map(({ content, toolCall }) => [content, toolCall])).toEqual([
+      ["perform the task", undefined],
+      ["Used Grep", "Grep"],
+      ["Started the audit in the background. I will report back when it finishes.", undefined],
+    ]);
+    expect((reload.messages as Array<Record<string, unknown>>).find((message) => message.toolCall)?.meta)
+      .toEqual({ sidechain: true });
+  });
+
+  it("drops a sub-agent call still running when the turn ends, rather than keep it in progress forever", async () => {
+    const { reload } = await runTurn([
+      { type: "tool_use", content: "Agent", toolName: "Agent", toolId: "main-1" },
+      { type: "tool_result", content: "ok", toolName: "Agent", toolId: "main-1" },
+      { type: "tool_use", content: "WebFetch", toolName: "WebFetch", toolId: "sub-2", sidechain: true },
+    ], { sessionId: "engine-sidechain-open", result: "Launched it." });
+
+    expect(normalizedRows(reload).map(({ content }) => content)).toEqual([
+      "perform the task",
+      "Used Agent",
+      "Launched it.",
+    ]);
+  });
+
+  it("an interrupted turn keeps the tool rows that completed and drops the rest", async () => {
+    const queue = new (await import("../../sessions/queue.js")).SessionQueue();
+    const started = deferred<void>();
+    const killed = deferred<string>();
+    let runs = 0;
+    const engine = {
+      name: "codex",
+      run: async (opts: EngineRunOpts): Promise<EngineResult> => {
+        runs += 1;
+        if (runs > 1) return { sessionId: "engine-next", result: "Second answer." };
+        opts.onStream?.({ type: "text", content: "Checking three things." });
+        opts.onStream?.({ type: "tool_use", content: "Read", toolName: "Read", toolId: "call-1" });
+        opts.onStream?.({ type: "tool_result", content: "ok", toolName: "Read", toolId: "call-1" });
+        opts.onStream?.({ type: "tool_use", content: "Search", toolName: "Search", toolId: "call-2" });
+        opts.onStream?.({ type: "tool_result", content: "ok", toolName: "Search", toolId: "call-2" });
+        opts.onStream?.({ type: "tool_use", content: "Bash", toolName: "Bash", toolId: "call-3" });
+        started.resolve();
+        return { sessionId: "engine-interrupted", result: "", error: await killed.promise };
+      },
+      kill: (_sessionId: string, reason?: string) => killed.resolve(reason ?? "Interrupted"),
+      isAlive: () => runs === 1,
+      killAll: () => {},
+      killIdle: () => {},
+    };
+    const context = {
+      getConfig: () => ({
+        gateway: {},
+        engines: { default: "codex", codex: { bin: "codex", model: "gpt-test" } },
+        models: { codex: { default: "gpt-test", models: [{ id: "gpt-test", label: "Test" }] } },
+        sessions: {},
+        mcp: { gateway: { enabled: false }, browser: { enabled: false } },
+      }),
+      connectors: new Map(),
+      startTime: Date.now(),
+      gatewayAuthToken: "test-token",
+      emit: () => {},
+      sessionManager: {
+        getEngine: () => engine,
+        getEngines: () => new Map([["codex", engine]]),
+        getQueue: () => queue,
+      },
+    } as unknown as import("../api.js").ApiContext;
+
+    const created = await request(context, "POST", "/api/sessions", { prompt: "first request", engine: "codex" });
+    const sessionId = created.body.id as string;
+    await started.promise;
+    const sent = await request(context, "POST", `/api/sessions/${sessionId}/message`, { message: "actually, do this instead" });
+    expect(sent.status).toBeLessThan(300);
+    for (let i = 0; i < 2000 && (runs < 2 || registry.getSession(sessionId)?.status === "running"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const rows = registry.getMessages(sessionId);
+    expect(rows.filter((message) => message.toolCall).map((message) => [message.toolCall, message.content, message.partial ?? false]))
+      .toEqual([["Read", "Used Read", false], ["Search", "Used Search", false]]);
+    expect(rows.map((message) => message.content)).toEqual([
+      "first request",
+      "Used Read",
+      "Used Search",
+      "actually, do this instead",
+      "Second answer.",
+    ]);
+  });
+
+  it("drops partials and the late result after an explicit stop", async () => {
+    const result = deferred<EngineResult>();
+    const started = deferred<void>();
+    const engine: Engine = {
+      name: "codex",
+      run: async (opts: EngineRunOpts) => {
+        opts.onStream?.({ type: "text", content: "stale interim" });
+        opts.onStream?.({ type: "tool_use", content: "Bash", toolName: "Bash" });
+        started.resolve();
+        return result.promise;
+      },
+    };
+    const queue = new (await import("../../sessions/queue.js")).SessionQueue();
+    const context = {
+      getConfig: () => ({
+        gateway: {},
+        engines: { default: "codex", codex: { bin: "codex", model: "gpt-test" } },
+        models: { codex: { default: "gpt-test", models: [{ id: "gpt-test", label: "Test" }] } },
+        sessions: {},
+        mcp: { gateway: { enabled: false }, browser: { enabled: false } },
+      }),
+      connectors: new Map(),
+      startTime: Date.now(),
+      gatewayAuthToken: "test-token",
+      emit: () => {},
+      sessionManager: {
+        getEngine: () => engine,
+        getEngines: () => new Map([["codex", engine]]),
+        getQueue: () => queue,
+      },
+    } as unknown as import("../api.js").ApiContext;
+
+    const created = await request(context, "POST", "/api/sessions", { prompt: "stop this", engine: "codex" });
+    const sessionId = created.body.id as string;
+    await started.promise;
+    expect((await request(context, "POST", `/api/sessions/${sessionId}/stop`)).status).toBe(200);
+    result.resolve({ sessionId: "engine-stopped", result: "stale final" });
+    const sessionKey = registry.getSession(sessionId)!.sessionKey;
+    for (let i = 0; i < 2000 && queue.isRunning(sessionKey); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(registry.getMessages(sessionId).map((message) => message.content)).toEqual(["stop this"]);
+    expect(registry.getSession(sessionId)?.status).toBe("interrupted");
+  });
+});

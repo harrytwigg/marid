@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make registered Jinn workspaces host-scoped, remotely reachable, switchable from a neutral desktop launcher, and creatable from the web UI with automatic first-run onboarding.
+**Goal:** Make registered Hundredfold workspaces host-scoped, remotely reachable, switchable from a neutral desktop launcher, and creatable from the web UI with automatic first-run onboarding.
 
-**Architecture:** Move the registry path and behavior into a focused host-workspace module that is independent of `JINN_HOME`, while preserving the existing CLI facade. The gateway exposes typed list/create operations; creation runs setup and startup in isolated subprocesses, optionally mirrors an existing private Tailscale Serve mapping, and returns a one-time fragment credential so the new browser origin opens directly into onboarding. The web shares one workspace menu/dialog between the desktop rail and the existing mobile list.
+**Architecture:** Move the registry path and behavior into a focused host-workspace module that is independent of `HUNDREDFOLD_HOME`, while preserving the existing CLI facade. The gateway exposes typed list/create operations; creation runs setup and startup in isolated subprocesses, optionally mirrors an existing private Tailscale Serve mapping, and returns a one-time fragment credential so the new browser origin opens directly into onboarding. The web shares one workspace menu/dialog between the desktop rail and the existing mobile list.
 
 **Tech Stack:** TypeScript ES2022, Node filesystem/process APIs, Vitest, React 19, React Router 7, Radix Dialog, Tailwind 4.1, Lucide.
 
@@ -13,12 +13,12 @@
 ### Task 1: Host workspace directory and legacy migration
 
 **Files:**
-- Create: `packages/jinn/src/instances/directory.ts`
-- Modify: `packages/jinn/src/shared/paths.ts`
-- Modify: `packages/jinn/src/cli/instances.ts`
-- Test: `packages/jinn/src/instances/directory.test.ts`
+- Create: `packages/hundredfold/src/instances/directory.ts`
+- Modify: `packages/hundredfold/src/shared/paths.ts`
+- Modify: `packages/hundredfold/src/cli/instances.ts`
+- Test: `packages/hundredfold/src/instances/directory.test.ts`
 
-- [ ] Write failing tests for macOS, Windows, and XDG paths; v1 array import from `~/.jinn/instances.json`; immutable IDs; atomic schema-v2 writes; and registry override compatibility.
+- [ ] Write failing tests for macOS, Windows, and XDG paths; v1 array import from `~/.hundredfold/instances.json`; immutable IDs; atomic schema-v2 writes; and registry override compatibility.
 - [ ] Run the focused test and confirm it fails because the host directory module does not exist.
 - [ ] Implement `resolveHostDataDir`, `resolveInstancesRegistryPath`, schema validation/normalization, idempotent legacy import, and atomic `0600` persistence.
 - [ ] Keep `cli/instances.ts` as a compatibility re-export so existing CLI consumers do not depend on gateway code.
@@ -27,14 +27,14 @@
 ### Task 2: Workspace naming, creation, startup, and access discovery
 
 **Files:**
-- Create: `packages/jinn/src/instances/create.ts`
-- Create: `packages/jinn/src/instances/access.ts`
-- Modify: `packages/jinn/src/cli/create.ts`
-- Modify: `packages/jinn/bin/jinn.ts`
-- Test: `packages/jinn/src/instances/create.test.ts`
-- Test: `packages/jinn/src/instances/access.test.ts`
+- Create: `packages/hundredfold/src/instances/create.ts`
+- Create: `packages/hundredfold/src/instances/access.ts`
+- Modify: `packages/hundredfold/src/cli/create.ts`
+- Modify: `packages/hundredfold/bin/hundredfold.ts`
+- Test: `packages/hundredfold/src/instances/create.test.ts`
+- Test: `packages/hundredfold/src/instances/access.test.ts`
 
-- [ ] Write failing tests showing `John` becomes display name `John`, slug `john`, instance id/name `jinn-john`, and home `~/.jinn-john`, while invalid/path-traversal names are rejected.
+- [ ] Write failing tests showing `John` becomes display name `John`, slug `john`, instance id/name `hundredfold-john`, and home `~/.hundredfold-john`, while invalid/path-traversal names are rejected.
 - [ ] Write failing tests for available-port selection, subprocess setup/start arguments, rollback before registration, and existing registry-based `-i` home resolution.
 - [ ] Write failing access tests that parse Tailscale Serve JSON, map internal ports to HTTPS origins (including 443), infer a same-host remote URL when no provider mapping exists, and preserve loopback URLs locally.
 - [ ] Implement the creation service with injected subprocess/health dependencies, YAML config patching, registration only after setup succeeds, daemon startup, bounded health polling, and warning-only remote exposure failures.
@@ -45,17 +45,17 @@
 ### Task 3: Gateway workspace API and seamless browser handoff
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 - Modify: `packages/web/src/lib/auth.ts`
 - Modify: `packages/web/src/routes/auth-provider.tsx`
-- Test: `packages/jinn/src/gateway/__tests__/instances-api.test.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/instances-api.test.ts`
 - Test: `packages/web/src/lib/__tests__/auth.test.ts`
 - Test: `packages/web/src/routes/auth-provider.test.tsx`
 
 - [ ] Write failing API tests for an authenticated `GET /api/instances` response keyed by current home identity with `displayName`, `switchUrl`, and runtime state.
 - [ ] Write failing API tests for operator-only `POST /api/instances`, duplicate-name/port conflicts, successful create/start, one-time pairing fragment, and nonfatal exposure warnings.
 - [ ] Implement current-origin observation, provider-aware URL resolution, home/PID-aware health, and the POST route using injected creation dependencies for tests.
-- [ ] Write failing browser-auth tests for consuming and removing a `jinn-pair` hash value before automatically exchanging it.
+- [ ] Write failing browser-auth tests for consuming and removing a `hundredfold-pair` hash value before automatically exchanging it.
 - [ ] Implement auto-pairing in `AuthProvider`, then re-fetch auth state; leave the ordinary pairing screen as the failure fallback.
 - [ ] Run focused gateway and web auth tests until green.
 
@@ -81,8 +81,8 @@
 ### Task 5: Cross-theme and cross-breakpoint verification
 
 **Files:**
-- Create outside repo: `~/.jinn-audits/workspace-launcher-fixture.mjs`
-- Create outside repo: `~/.jinn-audits/workspace-launcher-*.png`
+- Create outside repo: `~/.hundredfold-audits/workspace-launcher-fixture.mjs`
+- Create outside repo: `~/.hundredfold-audits/workspace-launcher-*.png`
 
 - [ ] Build the web package and run it against a fixture gateway with auth disabled and deterministic workspace responses.
 - [ ] Capture desktop 1440px dark/light states with the menu open and creation dialog visible.

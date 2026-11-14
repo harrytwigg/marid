@@ -22,9 +22,9 @@
 ### Task 1: Derive delegated activity from the session tree
 
 **Files:**
-- Create: `packages/jinn/src/sessions/delegated-activity.ts`
-- Create: `packages/jinn/src/sessions/__tests__/delegated-activity.test.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
+- Create: `packages/hundredfold/src/sessions/delegated-activity.ts`
+- Create: `packages/hundredfold/src/sessions/__tests__/delegated-activity.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
 
 **Interfaces:**
 - Consumes: `Session[]` and a `ReadonlySet<string>` of active session IDs.
@@ -36,7 +36,7 @@ Cover direct children, transitive grandchildren, multiple active descendants, du
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/sessions/__tests__/delegated-activity.test.ts`
+Run: `pnpm --filter hundredfold test -- src/sessions/__tests__/delegated-activity.test.ts`
 
 Expected: FAIL because `buildDelegatedActivityIndex` does not exist.
 
@@ -46,15 +46,15 @@ For every active session, walk `parentSessionId` links with a per-walk visited s
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli test -- src/sessions/__tests__/delegated-activity.test.ts`
+Run: `pnpm --filter hundredfold test -- src/sessions/__tests__/delegated-activity.test.ts`
 
 Expected: PASS.
 
 ### Task 2: Add the summary to session API payloads
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/session-serialization.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/session-serialization.test.ts`
 
 **Interfaces:**
 - Consumes: `buildDelegatedActivityIndex`, queue transport state, stored waiting state, and runtime `backgroundActivity`.
@@ -66,7 +66,7 @@ Assert that a parent serializes a transitive summary while preserving `status: "
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/gateway/__tests__/session-serialization.test.ts`
+Run: `pnpm --filter hundredfold test -- src/gateway/__tests__/session-serialization.test.ts`
 
 Expected: FAIL because session serialization does not expose delegated activity.
 
@@ -76,7 +76,7 @@ Build the activity index once for list payloads and once for individual session 
 
 - [ ] **Step 4: Run gateway tests and verify GREEN**
 
-Run: `pnpm --filter jinn-cli test -- src/gateway/__tests__/session-serialization.test.ts src/sessions/__tests__/delegated-activity.test.ts`
+Run: `pnpm --filter hundredfold test -- src/gateway/__tests__/session-serialization.test.ts src/sessions/__tests__/delegated-activity.test.ts`
 
 Expected: PASS.
 
@@ -101,7 +101,7 @@ Assert that idle parents with delegated activity receive the orange activity sta
 
 - [ ] **Step 2: Run the focused web tests and verify RED**
 
-Run: `pnpm --filter @jinn/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
+Run: `pnpm --filter @hundredfold/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
 
 Expected: FAIL because the UI ignores `delegatedActivity`.
 
@@ -111,7 +111,7 @@ Generalize the toolbar status component to prefer delegated copy when present, r
 
 - [ ] **Step 4: Run the focused web tests and verify GREEN**
 
-Run: `pnpm --filter @jinn/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
+Run: `pnpm --filter @hundredfold/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
 
 Expected: PASS.
 

@@ -12,7 +12,7 @@ import { boardKey, parseBoardParam, type BoardId } from "./board-route"
  * tab opened later starts where the last one left off. Every storage access is guarded: a browser
  * without storage keeps the location for the page's life instead. */
 
-export const TODOS_TAB_LOCATION_KEY = "jinn-todos-tab-location"
+export const TODOS_TAB_LOCATION_KEY = "hundredfold-todos-tab-location"
 const VERSION = 1
 
 interface StoredLocation {

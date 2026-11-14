@@ -3,7 +3,7 @@
 //
 //   node capture-bar-load.mjs <sandbox-home> <base-url> <out-dir>
 //
-// Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) at desktop and phone width and
+// Runs in the browser HUNDREDFOLD_CAPTURE_BROWSER names (Firefox by default) at desktop and phone width and
 // exits non-zero when a check fails. Photographs the press (chunk pending) and the arrival, side by side
 // as <viewport>-pending.png and <viewport>-arrived.png.
 import fs from 'node:fs'
@@ -15,7 +15,7 @@ const [sandboxHome, baseUrl, outDir] = process.argv.slice(2)
 if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: capture-bar-load.mjs <sandbox-home> <base-url> <out-dir>')
 const headers = authHeaders(sandboxHome)
 fs.mkdirSync(outDir, { recursive: true })
-const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
+const browser = await (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 const CHUNK = '**/assets/capture-bar-*.js'
 const results = []
 async function check(name, body) {
@@ -41,7 +41,7 @@ const layout = (page) =>
 
 async function open(viewport, touch) {
   const context = await browser.newContext({ viewport, hasTouch: touch, extraHTTPHeaders: headers, reducedMotion: 'reduce' })
-  await context.addInitScript(() => localStorage.setItem('jinn-onboarded', 'true'))
+  await context.addInitScript(() => localStorage.setItem('hundredfold-onboarded', 'true'))
   return context
 }
 async function load(page) {
@@ -52,7 +52,7 @@ async function load(page) {
 }
 
 for (const [name, viewport, touch] of [['desktop', { width: 1440, height: 900 }, false], ['phone', { width: 390, height: 844 }, true]]) {
-  console.log(`${name} (${process.env.JINN_CAPTURE_BROWSER === 'chromium' ? 'Chromium' : 'Firefox'})`)
+  console.log(`${name} (${process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? 'Chromium' : 'Firefox'})`)
   const context = await open(viewport, touch)
   const page = await context.newPage()
   /** @type {(value?: unknown) => void} */

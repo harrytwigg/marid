@@ -83,13 +83,13 @@ function DeferredOnboardingWizard() {
   const forceFreshWorkspaceOnboarding = typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("onboarding") === "1"
   const onboardedLocally = typeof window !== "undefined"
-    && !!localStorage.getItem("jinn-onboarded")
+    && !!localStorage.getItem("hundredfold-onboarded")
     && !forceFreshWorkspaceOnboarding
   const { data, isError } = useOnboarding({ enabled: !onboardedLocally })
 
   useEffect(() => {
     if (data?.onboarded && typeof window !== "undefined") {
-      localStorage.setItem("jinn-onboarded", "true")
+      localStorage.setItem("hundredfold-onboarded", "true")
     }
   }, [data?.onboarded])
 

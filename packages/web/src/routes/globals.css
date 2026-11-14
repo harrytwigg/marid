@@ -40,7 +40,7 @@
   display: grid;
   min-width: 0;
   grid-template-rows: 0fr;
-  animation: jinn-delegation-grow 220ms var(--ease-snappy) var(--delegation-arrival-delay, 0ms) both;
+  animation: hundredfold-delegation-grow 220ms var(--ease-snappy) var(--delegation-arrival-delay, 0ms) both;
 }
 
 .delegation-arrival-inner {
@@ -49,14 +49,14 @@
   opacity: 0;
   filter: blur(3px);
   transform: translateY(8px) scale(.985);
-  animation: jinn-delegation-card-in 180ms var(--ease-snappy) calc(var(--delegation-arrival-delay, 0ms) + 35ms) both;
+  animation: hundredfold-delegation-card-in 180ms var(--ease-snappy) calc(var(--delegation-arrival-delay, 0ms) + 35ms) both;
 }
 
-@keyframes jinn-delegation-grow {
+@keyframes hundredfold-delegation-grow {
   to { grid-template-rows: 1fr; }
 }
 
-@keyframes jinn-delegation-card-in {
+@keyframes hundredfold-delegation-card-in {
   to { opacity: 1; filter: blur(0); transform: none; }
 }
 
@@ -200,13 +200,13 @@
      the exit as well as the entrance, and --ease-spring already carries the
      overshoot a spring config would buy — at zero bundle cost. Each exit is
      quicker than its entrance; leaving should read as getting out of the way. */
-  --animate-overlay-in: jinn-overlay-in var(--duration-base) var(--ease-smooth) both;
-  --animate-overlay-out: jinn-overlay-out var(--duration-fast) var(--ease-smooth) both;
-  --animate-pop-in: jinn-pop-in var(--duration-base) var(--ease-spring) both;
-  --animate-pop-out: jinn-pop-out var(--duration-fast) var(--ease-smooth) both;
-  --animate-sheet-in: jinn-sheet-in var(--duration-slow) var(--ease-snappy) both;
-  --animate-sheet-out: jinn-sheet-out var(--duration-base) var(--ease-snappy) both;
-  --animate-capture-step-in: jinn-capture-step-in var(--duration-base) var(--ease-snappy) both;
+  --animate-overlay-in: hundredfold-overlay-in var(--duration-base) var(--ease-smooth) both;
+  --animate-overlay-out: hundredfold-overlay-out var(--duration-fast) var(--ease-smooth) both;
+  --animate-pop-in: hundredfold-pop-in var(--duration-base) var(--ease-spring) both;
+  --animate-pop-out: hundredfold-pop-out var(--duration-fast) var(--ease-smooth) both;
+  --animate-sheet-in: hundredfold-sheet-in var(--duration-slow) var(--ease-snappy) both;
+  --animate-sheet-out: hundredfold-sheet-out var(--duration-base) var(--ease-snappy) both;
+  --animate-capture-step-in: hundredfold-capture-step-in var(--duration-base) var(--ease-snappy) both;
 }
 
 /* ============================================
@@ -391,8 +391,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* The shared live-work pulse (StateLine dots, activity pills). Global so any
-   surface can use animate-[jinn-pulse_1.4s_infinite] without a local <style>. */
-@keyframes jinn-pulse {
+   surface can use animate-[hundredfold-pulse_1.4s_infinite] without a local <style>. */
+@keyframes hundredfold-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
@@ -500,13 +500,13 @@ h1, h2, h3, h4, h5, h6 {
    writing `transform` would throw them into a corner mid-animation.
    ============================================ */
 
-@keyframes jinn-overlay-in { from { opacity: 0; } }
-@keyframes jinn-overlay-out { to { opacity: 0; } }
-@keyframes jinn-pop-in { from { opacity: 0; scale: 0.96; } }
-@keyframes jinn-pop-out { to { opacity: 0; scale: 0.96; } }
-@keyframes jinn-sheet-in { from { translate: 0 100%; } }
-@keyframes jinn-sheet-out { to { translate: 0 100%; } }
-@keyframes jinn-capture-step-in { from { opacity: 0; translate: 0 4px; } }
+@keyframes hundredfold-overlay-in { from { opacity: 0; } }
+@keyframes hundredfold-overlay-out { to { opacity: 0; } }
+@keyframes hundredfold-pop-in { from { opacity: 0; scale: 0.96; } }
+@keyframes hundredfold-pop-out { to { opacity: 0; scale: 0.96; } }
+@keyframes hundredfold-sheet-in { from { translate: 0 100%; } }
+@keyframes hundredfold-sheet-out { to { translate: 0 100%; } }
+@keyframes hundredfold-capture-step-in { from { opacity: 0; translate: 0 4px; } }
 
 /* Route changes. React Router drives the native View Transition; all we own is
    its timing, so the cross-fade is the same length as everything else. */
@@ -520,10 +520,10 @@ h1, h2, h3, h4, h5, h6 {
    both sides of every navigation, so fading it out and back in would read as a
    flash. Naming it lifts it out of the root snapshot, and an instant swap holds
    it still while the content underneath transitions. */
-::view-transition-old(jinn-nav-rail),
-::view-transition-new(jinn-nav-rail),
-::view-transition-old(jinn-tab-bar),
-::view-transition-new(jinn-tab-bar) {
+::view-transition-old(hundredfold-nav-rail),
+::view-transition-new(hundredfold-nav-rail),
+::view-transition-old(hundredfold-tab-bar),
+::view-transition-new(hundredfold-tab-bar) {
   animation-duration: var(--duration-instant);
 }
 
@@ -547,9 +547,9 @@ h1, h2, h3, h4, h5, h6 {
    over ~1.6s. Rows inside a burst stagger via --arrive-delay (+90ms each).
    ============================================ */
 
-.comm-arrive { overflow: hidden; animation: jinn-comm-room 220ms var(--ease-snappy) backwards; animation-delay: var(--arrive-delay, 0ms); }
-.comm-arrive .comm-row { animation: jinn-comm-rise 240ms var(--ease-smooth) backwards; animation-delay: calc(var(--arrive-delay, 0ms) + 140ms); }
-.comm-arrive .comm-chip > span { animation: jinn-comm-chip 260ms var(--ease-snappy) backwards; animation-delay: calc(var(--arrive-delay, 0ms) + 160ms); }
+.comm-arrive { overflow: hidden; animation: hundredfold-comm-room 220ms var(--ease-snappy) backwards; animation-delay: var(--arrive-delay, 0ms); }
+.comm-arrive .comm-row { animation: hundredfold-comm-rise 240ms var(--ease-smooth) backwards; animation-delay: calc(var(--arrive-delay, 0ms) + 140ms); }
+.comm-arrive .comm-chip > span { animation: hundredfold-comm-chip 260ms var(--ease-snappy) backwards; animation-delay: calc(var(--arrive-delay, 0ms) + 160ms); }
 .comm-arrive .comm-row::after {
   content: "";
   position: absolute;
@@ -558,16 +558,16 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--accent-fill);
   pointer-events: none;
   opacity: 0;
-  animation: jinn-comm-wash 1.6s var(--ease-smooth) both;
+  animation: hundredfold-comm-wash 1.6s var(--ease-smooth) both;
   animation-delay: calc(var(--arrive-delay, 0ms) + 200ms);
 }
-@keyframes jinn-comm-room { from { max-height: 0; opacity: 0.001; } to { max-height: 48px; opacity: 1; } }
-@keyframes jinn-comm-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@keyframes jinn-comm-chip { from { scale: 0.25; filter: blur(4px); opacity: 0; } to { scale: 1; filter: none; opacity: 1; } }
-@keyframes jinn-comm-wash { 0% { opacity: 0; } 12% { opacity: 0.55; } 100% { opacity: 0; } }
+@keyframes hundredfold-comm-room { from { max-height: 0; opacity: 0.001; } to { max-height: 48px; opacity: 1; } }
+@keyframes hundredfold-comm-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes hundredfold-comm-chip { from { scale: 0.25; filter: blur(4px); opacity: 0; } to { scale: 1; filter: none; opacity: 1; } }
+@keyframes hundredfold-comm-wash { 0% { opacity: 0; } 12% { opacity: 0.55; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .comm-arrive, .comm-arrive .comm-row, .comm-arrive .comm-chip > span { animation: none; }
-  .comm-arrive .comm-row::after { animation: jinn-comm-wash 0.8s linear both; }
+  .comm-arrive .comm-row::after { animation: hundredfold-comm-wash 0.8s linear both; }
 }
 
 /* ============================================
@@ -582,17 +582,17 @@ h1, h2, h3, h4, h5, h6 {
    ============================================ */
 
 .user-msg-bubble[data-msg-enter] {
-  animation: jinn-msg-send-in var(--duration-base) var(--ease-smooth) backwards;
+  animation: hundredfold-msg-send-in var(--duration-base) var(--ease-smooth) backwards;
   transform-origin: 100% 100%;
 }
 /* The bubble is the fallback target: a row that is all blocks — a
    company-activity card, a task list — has no transcript to carry the mark. */
 .assistant-transcript[data-msg-enter],
 .assistant-msg-bubble[data-msg-enter] {
-  animation: jinn-msg-receive-in var(--duration-slow) var(--ease-smooth) backwards;
+  animation: hundredfold-msg-receive-in var(--duration-slow) var(--ease-smooth) backwards;
 }
-@keyframes jinn-msg-send-in { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
-@keyframes jinn-msg-receive-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes hundredfold-msg-send-in { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes hundredfold-msg-receive-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* The three send states are token deltas on ONE geometry. Radius, padding,
    weight and size are identical in all three: a size change would reflow the
@@ -625,10 +625,10 @@ h1, h2, h3, h4, h5, h6 {
    before paint, not animated to. Deliberately no `both` fill: the end state is the
    resting state, so the transform is gone once it finishes and the transcript's
    ancestor is not left promoted underneath a scroll. */
-[data-chat-pane-session] { animation: jinn-chat-open var(--duration-base) var(--ease-smooth); }
+[data-chat-pane-session] { animation: hundredfold-chat-open var(--duration-base) var(--ease-smooth); }
 
-@keyframes jinn-mobile-chat-crossfade { from { opacity: 0; } }
-@keyframes jinn-mobile-preview-in { from { opacity: 0; } }
+@keyframes hundredfold-mobile-chat-crossfade { from { opacity: 0; } }
+@keyframes hundredfold-mobile-preview-in { from { opacity: 0; } }
 
 /* The switch belongs to the wrapper in multi-chat-grid.tsx, which is keyed on
    the committed pane and so replays once per switch. Leaving the pane's own
@@ -637,7 +637,7 @@ h1, h2, h3, h4, h5, h6 {
 @media (max-width: 1023px) {
   .mobile-working-set-thread [data-chat-pane-session] { animation: none; }
 }
-@keyframes jinn-chat-open { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes hundredfold-chat-open { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   [data-chat-pane-session] { animation: none; }
 }
@@ -647,8 +647,8 @@ h1, h2, h3, h4, h5, h6 {
    button share that row, and neither may move. Marked per change and never on
    mount, so returning to a thread does not animate a title already on screen.
    No fill, like the chat open above it — the end state is the resting state. */
-[data-title-enter] { animation: jinn-title-enter var(--duration-base) var(--ease-smooth); }
-@keyframes jinn-title-enter { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+[data-title-enter] { animation: hundredfold-title-enter var(--duration-base) var(--ease-smooth); }
+@keyframes hundredfold-title-enter { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   [data-title-enter] { animation: none; }
 }
@@ -668,19 +668,19 @@ h1, h2, h3, h4, h5, h6 {
 
 /* One gutter serves the page margin and the content column both, so the large
    title and the body it heads cannot drift apart: a route publishes its measure
-   as --jinn-content-width and the leftover width is split either side. Unset,
+   as --hundredfold-content-width and the leftover width is split either side. Unset,
    the column is the full width and the gutter is just the page margin. */
-.jinn-scrollport {
-  --jinn-gutter: max(var(--space-3), (100% - var(--jinn-content-width, 100%)) / 2);
-  /* Declared here because the sticky bar pins against it — see .jinn-title-bar. */
-  --jinn-scrollport-top: var(--space-5);
-  padding-inline: var(--jinn-gutter);
-  padding-top: var(--jinn-scrollport-top);
+.hundredfold-scrollport {
+  --hundredfold-gutter: max(var(--space-3), (100% - var(--hundredfold-content-width, 100%)) / 2);
+  /* Declared here because the sticky bar pins against it — see .hundredfold-title-bar. */
+  --hundredfold-scrollport-top: var(--space-5);
+  padding-inline: var(--hundredfold-gutter);
+  padding-top: var(--hundredfold-scrollport-top);
 }
 
 @media (min-width: 48rem) {
-  .jinn-scrollport {
-    --jinn-gutter: max(var(--space-10), (100% - var(--jinn-content-width, 100%)) / 2);
+  .hundredfold-scrollport {
+    --hundredfold-gutter: max(var(--space-10), (100% - var(--hundredfold-content-width, 100%)) / 2);
   }
 }
 
@@ -689,54 +689,54 @@ h1, h2, h3, h4, h5, h6 {
    padding too: a sticky inset counts from the content box, so `top: 0` pins the
    bar BELOW that padding and leaves a band of unblurred content sliding past
    above it. */
-.jinn-title-bar {
-  top: calc(var(--jinn-scrollport-top, 0px) * -1);
-  margin-inline: calc(var(--jinn-gutter) * -1);
-  padding-inline: var(--jinn-gutter);
+.hundredfold-title-bar {
+  top: calc(var(--hundredfold-scrollport-top, 0px) * -1);
+  margin-inline: calc(var(--hundredfold-gutter) * -1);
+  padding-inline: var(--hundredfold-gutter);
 }
 
-@keyframes jinn-title-collapse {
+@keyframes hundredfold-title-collapse {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to   { opacity: 0; transform: translateY(-6px) scale(0.92); }
 }
 
-.jinn-large-title {
-  animation: jinn-title-collapse linear both;
+.hundredfold-large-title {
+  animation: hundredfold-title-collapse linear both;
   animation-timeline: scroll(nearest block);
-  animation-range: 0 var(--jinn-collapse-distance);
+  animation-range: 0 var(--hundredfold-collapse-distance);
 }
 
-@keyframes jinn-title-reveal {
+@keyframes hundredfold-title-reveal {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.jinn-inline-title {
+.hundredfold-inline-title {
   opacity: 0;
-  animation: jinn-title-reveal linear both;
+  animation: hundredfold-title-reveal linear both;
   animation-timeline: scroll(nearest block);
-  animation-range: 0 var(--jinn-collapse-distance);
+  animation-range: 0 var(--hundredfold-collapse-distance);
 }
 
 /* Where the timeline is unsupported the header is permanently inline: no large
    title, the inline one always visible, the bar's material always applied. One
    line shorter and entirely correct — nothing is animated badly. */
 @supports not (animation-timeline: scroll()) {
-  .jinn-large-title { display: none; }
-  .jinn-inline-title { opacity: 1; }
+  .hundredfold-large-title { display: none; }
+  .hundredfold-inline-title { opacity: 1; }
 }
 
 /* Same state under reduced motion, and it has to be said here: a scroll-driven
    animation is not time-driven, so neither the --duration-* collapse nor the
    global `animation-duration: 0.01ms` reset reaches it. */
 @media (prefers-reduced-motion: reduce) {
-  .jinn-large-title { display: none; }
-  .jinn-inline-title { opacity: 1; animation: none; }
+  .hundredfold-large-title { display: none; }
+  .hundredfold-inline-title { opacity: 1; animation: none; }
 }
 
 @media (min-width: 64rem) {
-  .jinn-large-title { animation: none; display: block; opacity: 1; transform: none; }
-  .jinn-inline-title { display: none; animation: none; }
+  .hundredfold-large-title { animation: none; display: block; opacity: 1; transform: none; }
+  .hundredfold-inline-title { display: none; animation: none; }
 }
 
 /* ============================================
@@ -758,17 +758,17 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 0 2px var(--talk-focus-ring);
   pointer-events: none;
   opacity: 0;
-  animation: jinn-talk-focus 1600ms var(--ease-smooth) both;
+  animation: hundredfold-talk-focus 1600ms var(--ease-smooth) both;
 }
 /* The undo strip's arrival. Transform and opacity only, so it never lands on
    the compositor's slow path over a page that is still doing something. The
    strip drops the animation outright under reduced motion, so there is nothing
    to soften here. */
-@keyframes jinn-undo-rise {
+@keyframes hundredfold-undo-rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
-@keyframes jinn-talk-focus {
+@keyframes hundredfold-talk-focus {
   0% { opacity: 0; transform: scale(0.985); }
   10% { opacity: 1; transform: scale(1); }
   72% { opacity: 1; transform: scale(1); }
@@ -787,18 +787,18 @@ h1, h2, h3, h4, h5, h6 {
 .dispatch-arrive {
   min-width: 0;
   overflow: hidden;
-  animation: jinn-comm-room 180ms var(--ease-snappy) backwards;
+  animation: hundredfold-comm-room 180ms var(--ease-snappy) backwards;
   animation-delay: var(--arrive-delay, 0ms);
 }
 .dispatch-arrive .dispatch-arrive-inner {
-  animation: jinn-dispatch-rise 200ms var(--ease-smooth) backwards;
+  animation: hundredfold-dispatch-rise 200ms var(--ease-smooth) backwards;
   animation-delay: calc(var(--arrive-delay, 0ms) + 40ms);
 }
 .dispatch-arrive .dispatch-chip > span {
-  animation: jinn-comm-chip 220ms var(--ease-snappy) backwards;
+  animation: hundredfold-comm-chip 220ms var(--ease-snappy) backwards;
   animation-delay: calc(var(--arrive-delay, 0ms) + 55ms);
 }
-@keyframes jinn-dispatch-rise {
+@keyframes hundredfold-dispatch-rise {
   from { opacity: 0; filter: blur(2px); transform: translateY(4px); }
   to { opacity: 1; filter: none; transform: none; }
 }
@@ -818,10 +818,10 @@ h1, h2, h3, h4, h5, h6 {
    pop on a row of text, which is the thing being fixed. The rise is the dispatch
    one without its blur: transform and opacity composite, `filter` does not. */
 .tool-arrive {
-  animation: jinn-tool-rise var(--duration-base) var(--ease-smooth) backwards;
+  animation: hundredfold-tool-rise var(--duration-base) var(--ease-smooth) backwards;
   animation-delay: var(--arrive-delay, 0ms);
 }
-@keyframes jinn-tool-rise {
+@keyframes hundredfold-tool-rise {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
@@ -1174,21 +1174,21 @@ h1, h2, h3, h4, h5, h6 {
 /* Rendered GFM task lists (shared markdown-view — notes, files, skills). The
    default disabled <input> + a leading bullet reads as browser chrome; render
    an Apple-style rounded checkbox instead and drop the list marker. */
-.jinn-markdown ul.contains-task-list {
+.hundredfold-markdown ul.contains-task-list {
   list-style: none;
   margin-left: 0;
   padding-left: 2px;
 }
 /* The shared custom <ul> renderer drops remark-gfm's `contains-task-list`
    class, so suppress the disc on the task-list <li> itself. */
-.jinn-markdown li.task-list-item {
+.hundredfold-markdown li.task-list-item {
   padding-left: 0;
   list-style: none;
 }
-.jinn-markdown li.task-list-item::marker {
+.hundredfold-markdown li.task-list-item::marker {
   content: "";
 }
-.jinn-markdown li.task-list-item input[type="checkbox"] {
+.hundredfold-markdown li.task-list-item input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
@@ -1200,11 +1200,11 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: inset 0 0 0 1.5px var(--separator-opaque);
   cursor: default;
 }
-.jinn-markdown li.task-list-item input[type="checkbox"]:checked {
+.hundredfold-markdown li.task-list-item input[type="checkbox"]:checked {
   background: var(--accent);
   box-shadow: none;
 }
-.jinn-markdown li.task-list-item input[type="checkbox"]:checked::after {
+.hundredfold-markdown li.task-list-item input[type="checkbox"]:checked::after {
   content: "";
   position: absolute;
   left: 6px;
@@ -1215,7 +1215,7 @@ h1, h2, h3, h4, h5, h6 {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.jinn-markdown li.task-list-item.done,
-.jinn-markdown li.task-list-item:has(input:checked) {
+.hundredfold-markdown li.task-list-item.done,
+.hundredfold-markdown li.task-list-item:has(input:checked) {
   color: var(--text-tertiary);
 }

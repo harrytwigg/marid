@@ -15,7 +15,7 @@ import { vi } from 'vitest'
 import { sessionBackedPaneIdentity, usePaneIdentity } from '../pane-identity'
 import { useHydrationSpinner, useRouteLoadingPresence } from '@/components/chat/chat-hydration'
 import { useLiveSession } from '@/hooks/use-live-session'
-import type { GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEventListener } from '@hundredfold/gateway-events'
 
 /** One committed paint of the pane the reader can see. A frame only exists when
  *  something is mounted and on screen, so an absent frame IS the withheld mount

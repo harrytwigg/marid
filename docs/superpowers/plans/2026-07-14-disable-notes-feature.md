@@ -20,8 +20,8 @@
 ### Task 1: Gateway flag and API boundary
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`, `packages/jinn/src/shared/config.ts`, `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/shared/__tests__/config.test.ts`, `packages/jinn/src/gateway/__tests__/notes-routes.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`, `packages/hundredfold/src/shared/config.ts`, `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/config.test.ts`, `packages/hundredfold/src/gateway/__tests__/notes-routes.test.ts`
 
 **Interfaces:**
 - Produces `config.gateway.notesEnabled?: boolean`; omitted means disabled.
@@ -50,8 +50,8 @@
 ### Task 3: MCP capability boundary
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/server.ts`, `packages/jinn/src/engines/pi-mcp.ts`
-- Test: `packages/jinn/src/mcp/__tests__/note-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/server.ts`, `packages/hundredfold/src/engines/pi-mcp.ts`
+- Test: `packages/hundredfold/src/mcp/__tests__/note-tools.test.ts`
 
 **Interfaces:**
 - `buildTools({ notesEnabled?: boolean })` excludes the four Notes verbs when false.

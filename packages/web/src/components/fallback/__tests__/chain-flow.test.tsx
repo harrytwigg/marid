@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { FallbackLink, ResolvedFallbackLink } from '@jinn/fallback-chain-wire'
+import type { FallbackLink, ResolvedFallbackLink } from '@hundredfold/fallback-chain-wire'
 import { buildChainFlow } from '../chain-flow-model'
 import { ChainFlow } from '../chain-flow'
 import { plainResolved, resolveForFlow } from '../resolve-links'

@@ -5,7 +5,7 @@ export function useOnboardingSeed(sessionId: string | null, pendingUserMessage?:
   const seed = useMemo<Message | undefined>(() => {
     if (!sessionId || pendingUserMessage) return undefined
     try {
-      const raw = sessionStorage.getItem('jinn-onboarding-seed')
+      const raw = sessionStorage.getItem('hundredfold-onboarding-seed')
       if (!raw) return undefined
       const data = JSON.parse(raw) as { sessionId: string; message: Message }
       if (data.sessionId === sessionId) return data.message
@@ -14,7 +14,7 @@ export function useOnboardingSeed(sessionId: string | null, pendingUserMessage?:
   }, [sessionId, pendingUserMessage])
 
   useEffect(() => {
-    if (seed) sessionStorage.removeItem('jinn-onboarding-seed')
+    if (seed) sessionStorage.removeItem('hundredfold-onboarding-seed')
   }, [seed])
 
   return seed

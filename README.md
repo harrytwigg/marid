@@ -18,13 +18,9 @@
 
 > **You bring the engines. Hundredfold runs the company.**
 
-## Built on Jinn
+## Credit
 
 Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, the web dashboard and the engine adapters. Hundredfold has its own name and release line and adds features on top of it - see [What Hundredfold adds](#what-hundredfold-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
-
-Internally the codename stays "Jinn": the `jinn` command, the `jinn-cli` package name, `~/.jinn` and the `JINN_*` variables are unchanged, so an existing Jinn install keeps working.
-
-> The `npm install -g jinn-cli` and Homebrew installs below ship the **upstream** Jinn package, not Hundredfold. To run Hundredfold's features, [build from this repository](#development).
 
 ---
 
@@ -43,9 +39,9 @@ Agent CLIs are powerful alone. Hundredfold gives them shared structure, ownershi
 
 ## What Hundredfold adds
 
-Everything in upstream Jinn still applies. On top of it, Hundredfold adds:
+Everything in the project Hundredfold was forked from still applies. On top of it, Hundredfold adds:
 
-| Area | Hundredfold | Jinn upstream |
+| Area | Hundredfold | Upstream |
 |---|---|---|
 | Workspace | VS Code-style split panes you can resize, per-pane tabs with preview and pinned tabs, drag a chat from the sidebar to split, mobile session tabs, teal theme | auto-arranged chat grid, single tab list, no resizing |
 | Terminal / CLI mode | type straight into the engine's TUI (stdin, paste, mouse, scroll); standalone shells on the gateway or a remote host in the sidebar | display-only CLI view with a composer and key bar |
@@ -56,7 +52,7 @@ Everything in upstream Jinn still applies. On top of it, Hundredfold adds:
 | Sessions | self-compaction (`compact_session`), engine-aware `/compact`, opt-in auto-compaction of long sessions (cache-cold, or past a context budget), fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
 | Todos and dispatch | closed departments, a default board walk that releases gated Todos and starts work on spare capacity, with an Auto-Dispatch page, per-Todo auto-start opt-out, session tree per Todo | open departments, no board walk |
 
-The full feature-by-feature table, with what upstream already has, is in [`docs/hundredfold-vs-jinn.md`](docs/hundredfold-vs-jinn.md).
+The full feature-by-feature table, with what upstream already has, is in [`docs/hundredfold-vs-upstream.md`](docs/hundredfold-vs-upstream.md).
 
 ---
 
@@ -67,31 +63,23 @@ The full feature-by-feature table, with what upstream already has, is in [`docs/
 > **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Hundredfold orchestrates your engines and can't run a session without one.
 
 ```bash
-# 1. Install (upstream Jinn package - see "Built on Jinn" above)
-npm install -g jinn-cli
+# 1. Install
+npm install -g hundredfold
 
 # 2. Install + sign in to at least one engine (example: Claude Code)
 npm install -g @anthropic-ai/claude-code
 claude            # run once, use /login, then quit
 
-# 3. Set up ~/.jinn (probes your engines, writes config, seeds your company)
-jinn setup
+# 3. Set up ~/.hundredfold (probes your engines, writes config, seeds your company)
+hundredfold setup
 
 # 4. Start the gateway - opens the dashboard for you
-jinn start
+hundredfold start
 ```
 
 Open **[http://localhost:7777](http://localhost:7777)** and send your first message.
 
-Or install via **Homebrew**:
-
-```bash
-brew tap hristo2612/jinn https://github.com/hristo2612/jinn
-brew install jinn
-jinn setup && jinn start
-```
-
-> **`--version` ≠ signed in.** Hundredfold drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
+> **`--version` ≠ signed in.** Hundredfold drives the official engine CLIs, so authenticate each one *before* `hundredfold start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
 
 ### Docker
 
@@ -104,8 +92,8 @@ cd hundredfold
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
 # Without one, /work is empty and the agents have nothing to work on.
 docker compose up -d --build
-docker compose exec jinn claude     # run once, use /login, then quit
-docker compose exec jinn jinn pair  # prints a code for the browser
+docker compose exec hundredfold claude     # run once, use /login, then quit
+docker compose exec hundredfold hundredfold pair  # prints a code for the browser
 ```
 
 Then open **[http://localhost:7777](http://localhost:7777)** and enter the code at the pairing prompt. The gateway binds `0.0.0.0` inside the container, so it requires auth, and your browser reaches it through Docker's NAT rather than loopback — which is why pairing replaces the automatic sign-in a host install gets.
@@ -117,22 +105,22 @@ The image ships the `claude` engine only. `codex`, `grok` and `hermes` are not i
 Everyday commands for a native install:
 
 ```bash
-jinn start      # start the gateway daemon (auto-opens the dashboard)
-jinn stop       # stop it
-jinn restart    # restart safely (detached; works even from inside a session)
-jinn status     # is the daemon running?
+hundredfold start      # start the gateway daemon (auto-opens the dashboard)
+hundredfold stop       # stop it
+hundredfold restart    # restart safely (detached; works even from inside a session)
+hundredfold status     # is the daemon running?
 ```
 
-Docker owns the gateway lifecycle instead — `jinn start`, `jinn stop`, and `jinn restart` are intentionally unavailable inside the container:
+Docker owns the gateway lifecycle instead — `hundredfold start`, `hundredfold stop`, and `hundredfold restart` are intentionally unavailable inside the container:
 
 ```bash
 docker compose ps                 # status and health
-docker compose logs -f jinn       # follow gateway logs
-docker compose restart jinn       # restart safely
+docker compose logs -f hundredfold       # follow gateway logs
+docker compose restart hundredfold       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
+After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `hundredfold migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/hundredfold/template/`.
 
 ---
 
@@ -155,13 +143,13 @@ Hundredfold exposes a small set of building blocks and handles the machinery und
 </div>
 <div align="center"><sub>A conversation with the COO: formatted replies, code, and a Todo reference. Delegations and callbacks show up beside the conversation as activity receipts.</sub></div>
 
-**Notes** are durable Markdown knowledge: plain `.md` files under `~/.jinn/knowledge/`, in folders of your choosing. Typed tools read and write them, and every update carries the revision it expects, so two sessions cannot silently overwrite each other.
+**Notes** are durable Markdown knowledge: plain `.md` files under `~/.hundredfold/knowledge/`, in folders of your choosing. Typed tools read and write them, and every update carries the revision it expects, so two sessions cannot silently overwrite each other.
 
 **Heartbeats** are recurring self-wakes a session schedules for itself. A message is redelivered into the owning session on a fixed interval until the session stops it, or a fire limit or expiry disarms it.
 
-**Plugins** extend the app itself: an enabled directory under `~/.jinn/plugins/` adds dashboard pages, sidebar rows, and status chips, and may also mount gateway HTTP routes and a supervised background task, with no build step. See [`docs/plugins.md`](docs/plugins.md) for the manifest, the SDK surface, and the security posture.
+**Plugins** extend the app itself: an enabled directory under `~/.hundredfold/plugins/` adds dashboard pages, sidebar rows, and status chips, and may also mount gateway HTTP routes and a supervised background task, with no build step. See [`docs/plugins.md`](docs/plugins.md) for the manifest, the SDK surface, and the security posture.
 
-**Skills and Cron** provide reusable playbooks and scheduled work. A built-in **MCP server** (`jinn`) gives engines typed tools for company operations; shell access remains available for local implementation.
+**Skills and Cron** provide reusable playbooks and scheduled work. A built-in **MCP server** (`hundredfold`) gives engines typed tools for company operations; shell access remains available for local implementation.
 
 ---
 
@@ -171,7 +159,7 @@ Hundredfold is a local gateway daemon plus a web dashboard. It dispatches work t
 
 ```
                           +----------------+
-                          |    jinn CLI    |
+                          |    hundredfold CLI    |
                           +-------+--------+
                                   |
                           +-------v--------+
@@ -199,7 +187,7 @@ Claude runs in a real interactive terminal, so eligible turns bill against a Max
 
 ## The org system
 
-Employees live in `~/.jinn/org/` as plain YAML:
+Employees live in `~/.hundredfold/org/` as plain YAML:
 
 ```yaml
 name: research-lead
@@ -268,7 +256,7 @@ The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and 
 
 ## Configuration
 
-Hundredfold reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
+Hundredfold reads `~/.hundredfold/config.yaml`. A fresh setup includes this core shape:
 
 ```yaml
 gateway:
@@ -319,8 +307,8 @@ logging:
 - **Todo board reminder** — every turn of a session with the built-in company tools ends with one fixed paragraph restating the Todo status procedure, so it survives long and compacted conversations. It is about 117 tokens, and each turn's copy stays in the engine's history, so a session of N turns carries about 117×N tokens of it until it compacts. It is added when the engine is called, never to the stored message, and never after a slash command. It tells a session to stay `executing` while its own child Todos, delegations or QA are running, and to block only for a wait outside them; the recovery sweep does not read that wait as a stall. `context.boardReminder` replaces the text (`{{default}}` stands for the built-in text, to extend it); `false` turns it off.
 - **Models** form an extensible per-engine capability registry. CLI discovery can replace fallback entries at runtime.
 - **MCP servers** are optional; enable `mcp.gateway` for the built-in company tools.
-- **Cron, employees, and skills** live in `~/.jinn/cron/jobs.json`, `~/.jinn/org/`, and `~/.jinn/skills/`.
-- **Plugins** live in `~/.jinn/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
+- **Cron, employees, and skills** live in `~/.hundredfold/cron/jobs.json`, `~/.hundredfold/org/`, and `~/.hundredfold/skills/`.
+- **Plugins** live in `~/.hundredfold/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
 - **Behind a reverse proxy or tunnel**, the proxy must preserve `Host`, or pass the host the browser dialled in `X-Forwarded-Host`. The gateway's WebSockets (the live event stream `/ws`, plugin event sockets and terminals) refuse a browser whose `Origin` is not the gateway's own host, so a proxy that rewrites `Host` and forwards neither leaves the dashboard without live updates. A Cloudflare tunnel's default ingress preserves `Host`; don't set `httpHostHeader` on it. Sign-in rate limiting also needs to know the real client behind a proxy: set `gateway.trustedProxies` (and, for some tunnels, `gateway.clientIpHeader`); see [`docs/behind-a-proxy.md`](docs/behind-a-proxy.md).
 
 Everything is human-readable and yours to edit. After upgrading, the gateway re-syncs the skills Hundredfold ships on boot (see the upgrade note under Quickstart). An edit to a shipped skill is replaced then, with the previous copy kept in a backup, so customize by writing a skill of your own. Skills you wrote, `CLAUDE.md`, `docs/`, `knowledge/` and `org/` are left as they are.
@@ -329,7 +317,7 @@ Everything is human-readable and yours to edit. After upgrading, the gateway re-
 
 ## Roadmap
 
-Hundredfold is in active beta. Shipped recently in upstream Jinn:
+Hundredfold is in active beta. Shipped recently:
 
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
 - **Isolated workspaces** with separate homes, ports, access settings, and authentication.
@@ -353,7 +341,7 @@ Hundredfold is a pnpm + turbo monorepo.
 git clone https://github.com/hundredfoldhq/hundredfold.git
 cd hundredfold
 pnpm install
-pnpm setup   # one-time: builds all packages and creates ~/.jinn
+pnpm setup   # one-time: builds all packages and creates ~/.hundredfold
 pnpm dev     # gateway (:7777) + Vite dev server (:5173) with hot reload
 ```
 
@@ -371,38 +359,30 @@ pnpm test:e2e    # Playwright end-to-end tests
 class where the platform has it), so it yields to an editor, a gateway or you. Locally each vitest
 suite leases up to eight workers from a core pool shared by every run on the machine — the
 machine's cores minus 12, never fewer than 8 — and waits when the pool is empty. Set
-`JINN_TEST_NICE=0` for a normal-priority run, `JINN_TEST_GLOBAL_CORES=0` to skip the pool. In CI
+`HUNDREDFOLD_TEST_NICE=0` for a normal-priority run, `HUNDREDFOLD_TEST_GLOBAL_CORES=0` to skip the pool. In CI
 neither applies and the run stays capped as it always has — turbo one task at a time, vitest two
 workers.
 
 > **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Hundredfold orchestrates your engines and can't run a session without one.
 
 ```bash
-# 1. Install (upstream Jinn package - see "Built on Jinn" above)
-npm install -g jinn-cli
+# 1. Install
+npm install -g hundredfold
 
 # 2. Install + sign in to at least one engine (example: Claude Code)
 npm install -g @anthropic-ai/claude-code
 claude            # run once, use /login, then quit
 
-# 3. Set up ~/.jinn (probes your engines, writes config, seeds your company)
-jinn setup
+# 3. Set up ~/.hundredfold (probes your engines, writes config, seeds your company)
+hundredfold setup
 
 # 4. Start the gateway - opens the dashboard for you
-jinn start
+hundredfold start
 ```
 
 Open **[http://localhost:7777](http://localhost:7777)** and send your first message.
 
-Or install via **Homebrew**:
-
-```bash
-brew tap hristo2612/jinn https://github.com/hristo2612/jinn
-brew install jinn
-jinn setup && jinn start
-```
-
-> **`--version` ≠ signed in.** Hundredfold drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
+> **`--version` ≠ signed in.** Hundredfold drives the official engine CLIs, so authenticate each one *before* `hundredfold start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
 
 ### Docker
 
@@ -415,8 +395,8 @@ cd hundredfold
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
 # Without one, /work is empty and the agents have nothing to work on.
 docker compose up -d --build
-docker compose exec jinn claude     # run once, use /login, then quit
-docker compose exec jinn jinn pair  # prints a code for the browser
+docker compose exec hundredfold claude     # run once, use /login, then quit
+docker compose exec hundredfold hundredfold pair  # prints a code for the browser
 ```
 
 Then open **[http://localhost:7777](http://localhost:7777)** and enter the code at the pairing prompt. The gateway binds `0.0.0.0` inside the container, so it requires auth, and your browser reaches it through Docker's NAT rather than loopback — which is why pairing replaces the automatic sign-in a host install gets.
@@ -428,22 +408,22 @@ The image ships the `claude` engine only. `codex`, `grok` and `hermes` are not i
 Everyday commands for a native install:
 
 ```bash
-jinn start      # start the gateway daemon (auto-opens the dashboard)
-jinn stop       # stop it
-jinn restart    # restart safely (detached; works even from inside a session)
-jinn status     # is the daemon running?
+hundredfold start      # start the gateway daemon (auto-opens the dashboard)
+hundredfold stop       # stop it
+hundredfold restart    # restart safely (detached; works even from inside a session)
+hundredfold status     # is the daemon running?
 ```
 
-Docker owns the gateway lifecycle instead — `jinn start`, `jinn stop`, and `jinn restart` are intentionally unavailable inside the container:
+Docker owns the gateway lifecycle instead — `hundredfold start`, `hundredfold stop`, and `hundredfold restart` are intentionally unavailable inside the container:
 
 ```bash
 docker compose ps                 # status and health
-docker compose logs -f jinn       # follow gateway logs
-docker compose restart jinn       # restart safely
+docker compose logs -f hundredfold       # follow gateway logs
+docker compose restart hundredfold       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
+After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `hundredfold migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/hundredfold/template/`.
 
 ---
 

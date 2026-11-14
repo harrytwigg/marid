@@ -1,0 +1,289 @@
+// packages/hundredfold/src/engines/hermes-acp.ts
+import { spawn, type ChildProcess } from "node:child_process";
+import type { InterruptibleEngine, EngineRunOpts, EngineResult } from "../shared/types.js";
+import { logger } from "../shared/logger.js";
+import { resolveBin } from "../shared/resolve-bin.js";
+import { HermesRpc } from "./hermes-jsonrpc.js";
+import { mapSessionUpdate, extractPromptText, reduceAgentText, isFinalMessageUpdate, initAdvertisesFinalMarker } from "./hermes-protocol.js";
+import { buildPromptWithPlatformContext } from "./platform-context.js";
+import { buildAcpMcpServers } from "./hermes-mcp.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { buildEngineChildEnv } from "../shared/child-env.js";
+
+const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
+const HANDSHAKE_TIMEOUT_MS = 60_000;
+const ALLOW_ALWAYS = { outcome: { outcome: "selected", optionId: "allow_always" } };
+
+interface ProcHandle {
+  rpc: HermesRpc;
+  killProc: () => void;
+  isAliveProc: () => boolean;
+  onExit: (cb: () => void) => void;
+  onError: (cb: (err: Error) => void) => void;
+}
+
+interface HermesProc {
+  handle: ProcHandle;
+  alive: boolean;
+  hermesSessionId?: string;
+  currentModelId?: string;
+  initialized: Promise<void>;
+  /** True once the initialize handshake confirmed this hermes build tags its
+   *  final full-reply frame (_meta.hermes.final). When false (older binary or
+   *  handshake error), the answer accumulator uses the exact-equality dedupe
+   *  fallback instead of the explicit marker. */
+  marksFinal: boolean;
+}
+
+export class HermesAcpEngine implements InterruptibleEngine {
+  name = "hermes" as const;
+  private procs = new Map<string, HermesProc>();
+  /** Overridable in tests to shorten the handshake timeout. */
+  protected handshakeTimeoutMs = HANDSHAKE_TIMEOUT_MS;
+
+  /** Test seam — overridden in unit tests to inject a fake server. */
+  protected spawnProc(bin: string, cwd: string, hundredfoldSessionId?: string): ProcHandle {
+    // The gateway's own HUNDREDFOLD_EMPLOYEE (if it was started inside an employee's session) is not this session's.
+    const { HUNDREDFOLD_EMPLOYEE: _gatewayEmployee, ...inheritedEnv } = process.env;
+    const child: ChildProcess = spawn(bin, ["acp"], {
+      stdio: ["pipe", "pipe", "ignore"],
+      cwd,
+      detached: process.platform !== "win32",
+      env: {
+        ...buildEngineChildEnv(inheritedEnv),
+        ...(hundredfoldSessionId ? { HUNDREDFOLD_SESSION_ID: hundredfoldSessionId } : {}),
+        ...employeeSessionEnv(hundredfoldSessionId),
+        HERMES_YOLO_MODE: "1",
+        HERMES_ACCEPT_HOOKS: "1",
+      },
+    });
+    const rpc = new HermesRpc(child.stdin!, child.stdout!);
+    return {
+      rpc,
+      killProc: () => {
+        try { process.kill(-child.pid!, "SIGTERM"); } catch { try { child.kill("SIGTERM"); } catch { /* ignore */ } }
+      },
+      isAliveProc: () => child.exitCode === null && !child.killed,
+      onExit: (cb) => child.on("exit", cb),
+      onError: (cb) => child.on("error", cb),
+    };
+  }
+
+  private getOrSpawn(hundredfoldId: string, bin: string, cwd: string): HermesProc {
+    const existing = this.procs.get(hundredfoldId);
+    if (existing && existing.alive) return existing;
+
+    const handle = this.spawnProc(bin, cwd, hundredfoldId);
+    // Fix 4: only auto-approve the specific permission-request method.
+    handle.rpc.onServerRequest((method) =>
+      method === "session/request_permission" ? ALLOW_ALWAYS : {},
+    );
+    const entry: HermesProc = {
+      handle,
+      alive: true,
+      marksFinal: false,
+      initialized: handle.rpc
+        .request<Record<string, unknown>>("initialize", { protocolVersion: 1, clientCapabilities: {} })
+        .then((res) => { entry.marksFinal = initAdvertisesFinalMarker(res); }),
+    };
+    handle.onExit(() => {
+      entry.alive = false;
+      handle.rpc.rejectAll(new Error("hermes acp exited"));
+    });
+    // Fix 2(a): surface spawn/exec errors so run() never hangs on ENOENT etc.
+    handle.onError((err) => {
+      entry.alive = false;
+      handle.rpc.rejectAll(new Error("hermes acp spawn/process error: " + err.message));
+    });
+    this.procs.set(hundredfoldId, entry);
+    return entry;
+  }
+
+  private evictProc(hundredfoldId: string, p: HermesProc): void {
+    p.alive = false;
+    try { p.handle.killProc(); } catch { /* ignore */ }
+    if (this.procs.get(hundredfoldId) === p) this.procs.delete(hundredfoldId);
+  }
+
+  async run(opts: EngineRunOpts): Promise<EngineResult> {
+    const hundredfoldId = opts.sessionId || opts.resumeSessionId || "default";
+    const bin = resolveBin("hermes", opts.bin);
+    const p = this.getOrSpawn(hundredfoldId, bin, opts.cwd);
+    const { rpc } = p.handle;
+
+    // Fix 2(b): guard the entire pre-prompt handshake with a timeout so a hung
+    // or dead server can't stall run() forever.
+    let handshakeWatchdog: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          await p.initialized;
+
+          // session/new or session/load (with Fix 3 fallback). GRS-018: emit the
+          // resolved MCP set into the ACP handshake — Hermes registers these
+          // servers at session start, so a hundredfold-spawned Hermes session finally
+          // sees (and can call) the attached hundredfold tools.
+          if (!p.hermesSessionId) {
+            const mcpServers = buildAcpMcpServers(opts.resolvedMcp);
+            if (opts.resumeSessionId) {
+              try {
+                await rpc.request("session/load", { sessionId: opts.resumeSessionId, cwd: opts.cwd, mcpServers });
+                p.hermesSessionId = opts.resumeSessionId;
+              } catch (loadErr) {
+                // Fix 3: stale/expired id — fall back to a fresh session so the
+                // gateway doesn't get permanently wedged on the bad id.
+                logger.warn(
+                  `[hermes-acp] session/load failed for ${opts.resumeSessionId}, falling back to session/new: ` +
+                  (loadErr instanceof Error ? loadErr.message : String(loadErr)),
+                );
+                const ns = await rpc.request<Record<string, unknown>>("session/new", { cwd: opts.cwd, mcpServers });
+                p.hermesSessionId = String(ns.sessionId);
+                const models = ns.models as Record<string, unknown> | undefined;
+                p.currentModelId = models?.currentModelId ? String(models.currentModelId) : undefined;
+              }
+            } else {
+              const ns = await rpc.request<Record<string, unknown>>("session/new", { cwd: opts.cwd, mcpServers });
+              p.hermesSessionId = String(ns.sessionId);
+              const models = ns.models as Record<string, unknown> | undefined;
+              p.currentModelId = models?.currentModelId ? String(models.currentModelId) : undefined;
+            }
+            await rpc.request("session/set_mode", { sessionId: p.hermesSessionId, modeId: "dont_ask" }).catch(() => {});
+          }
+
+          if (opts.model && opts.model !== p.currentModelId) {
+            await rpc.request("session/set_model", { sessionId: p.hermesSessionId, modelId: opts.model }).catch(() => {});
+            p.currentModelId = opts.model;
+          }
+        })(),
+        new Promise<never>((_, rej) => {
+          handshakeWatchdog = setTimeout(
+            () => rej(new Error("hermes acp handshake timeout")),
+            this.handshakeTimeoutMs,
+          );
+          handshakeWatchdog.unref?.();
+        }),
+      ]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.warn(`[hermes-acp] handshake error for ${hundredfoldId}: ${msg}`);
+      // Evict the mute/dead process so the next turn gets a clean respawn.
+      this.evictProc(hundredfoldId, p);
+      return { sessionId: "", result: "", error: msg };
+    } finally {
+      if (handshakeWatchdog) clearTimeout(handshakeWatchdog);
+    }
+
+    const rawPrompt = buildPromptWithPlatformContext(opts);
+
+    let resultText = "";
+    let lastContext: number | undefined;
+    let hasToolActivity = false;
+    let toolCallCount = 0;
+    const hermesSessionId = p.hermesSessionId;
+
+    const onNote = (m: string, params: Record<string, unknown>) => {
+      if (m !== "session/update" || params.sessionId !== hermesSessionId) return;
+      const rawUpdate = (params.update ?? {}) as Record<string, unknown>;
+      // Hermes streams answer text as incremental agent_message_chunk frames and
+      // may end with a FINAL full-reply frame of the SAME kind; the marker tells
+      // them apart. Marked -> REPLACE (redaction/transform wins); unmarked ->
+      // APPEND (repeats kept). Older binaries omit the marker, so fall back to
+      // exact-equality dedupe (marksFinal=false => legacyDedupe=true).
+      const isFinal = isFinalMessageUpdate(rawUpdate);
+      const legacyDedupe = !p.marksFinal;
+      const u = mapSessionUpdate(rawUpdate);
+      for (const d of u.deltas) {
+        if (d.type === "text") {
+          const { text, op } = reduceAgentText(resultText, d.content, { final: isFinal, legacyDedupe });
+          resultText = text;
+          // Forward the matching live-stream signal: replace -> text_snapshot
+          // (UI + partial persistence replace); append -> the incremental delta;
+          // drop -> nothing (the re-sent full reply is already accumulated).
+          if (op === "replace") opts.onStream?.({ type: "text_snapshot", content: text });
+          else if (op === "append") opts.onStream?.(d);
+        } else {
+          if (d.type === "tool_use" || d.type === "tool_result" || d.type === "block") {
+            hasToolActivity = true;
+            if (d.type === "tool_use") toolCallCount += 1;
+          }
+          opts.onStream?.(d);
+        }
+      }
+      if (u.contextTokens != null) lastContext = u.contextTokens;
+    };
+    rpc.onNotification(onNote);
+
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const res = await Promise.race([
+        rpc.request<Record<string, unknown>>("session/prompt", {
+          sessionId: hermesSessionId,
+          prompt: extractPromptText(rawPrompt),
+        }),
+        new Promise<never>((_, rej) => {
+          watchdog = setTimeout(() => rej(new Error("hermes turn timeout")), TURN_TIMEOUT_MS);
+          watchdog.unref?.();
+        }),
+      ]);
+
+      const stop = String(res.stopReason ?? res.stop_reason ?? "");
+      const error = !resultText
+        ? (stop === "refusal" || stop === "cancelled"
+          ? `Hermes turn ended: ${stop}`
+          : hasToolActivity
+            ? undefined
+            : `Hermes turn ended (${stop || "unknown"}) with no output`)
+        : undefined;
+
+      if (!resultText && hasToolActivity && !error) {
+        logger.info(`[hermes-acp] tool-only turn for ${hundredfoldId} completed with ${toolCallCount} tool call(s)`);
+      }
+      if (error) this.evictProc(hundredfoldId, p);
+
+      return {
+        sessionId: hermesSessionId!,
+        result: resultText,
+        contextTokens: lastContext,
+        error,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.warn(`[hermes-acp] turn error for ${hundredfoldId}: ${msg}`);
+      if (!resultText) this.evictProc(hundredfoldId, p);
+      return {
+        sessionId: hermesSessionId || "",
+        result: resultText,
+        contextTokens: lastContext,
+        error: resultText ? undefined : msg,
+      };
+    } finally {
+      if (watchdog) clearTimeout(watchdog);
+    }
+  }
+
+  kill(sessionId: string): void {
+    const p = this.procs.get(sessionId);
+    if (!p) return;
+    p.alive = false;
+    try { p.handle.killProc(); } catch { /* ignore */ }
+    this.procs.delete(sessionId);
+  }
+
+  isAlive(sessionId: string): boolean {
+    const p = this.procs.get(sessionId);
+    return !!p && p.alive && p.handle.isAliveProc();
+  }
+
+  killAll(): void {
+    for (const p of this.procs.values()) {
+      p.alive = false;
+      try { p.handle.killProc(); } catch { /* ignore */ }
+    }
+    this.procs.clear();
+  }
+
+  /** No shared idle pool — per-session procs recycle via kill on org reload. */
+  killIdle(): void {
+    /* no-op */
+  }
+}

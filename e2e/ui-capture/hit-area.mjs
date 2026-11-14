@@ -19,7 +19,7 @@ if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: hit-area.mjs <s
 
 const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
 fs.mkdirSync(outDir, { recursive: true })
-const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
+const browser = await (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 const results = []
 const failures = []
 
@@ -90,8 +90,8 @@ async function measure(theme, viewport) {
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
   await context.addInitScript(([t]) => {
-    localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
+    localStorage.setItem('hundredfold-theme', t)
+    localStorage.setItem('hundredfold-onboarded', 'true')
   }, [theme])
   const page = await context.newPage()
   try {

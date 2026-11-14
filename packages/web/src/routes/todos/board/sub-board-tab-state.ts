@@ -2,12 +2,12 @@ import { useCallback, useSyncExternalStore } from "react"
 import type { SubBoardDepth } from "./board-route"
 
 /* A pinned sub-board tab's own state: how deep it reads and the filters it carries, one record per Todo in
- * localStorage (`jinn-sub-board-tab:<todoId>`), so a reload brings the tab back where it was. Like the Todos tab's
+ * localStorage (`hundredfold-sub-board-tab:<todoId>`), so a reload brings the tab back where it was. Like the Todos tab's
  * location (todos-tab-location.tsx) it is read through a small module store, so the tab follows a write made while
  * it is on screen, and every storage access is guarded: a browser that will not take it keeps the state in memory
  * for the page's life instead. The record goes when the tab closes (clearSubBoardTabState). */
 
-const KEY_PREFIX = "jinn-sub-board-tab:"
+const KEY_PREFIX = "hundredfold-sub-board-tab:"
 const VERSION = 1
 
 export interface SubBoardTabState {

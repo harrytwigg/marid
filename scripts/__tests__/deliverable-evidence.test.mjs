@@ -25,7 +25,7 @@ function fixture(body = "# a Note the verifier will never read\n") {
   const home = tmp("evidence-home-")
   const repo = tmp("evidence-repo-")
   fs.writeFileSync(path.join(home, "note.md"), body)
-  return { home, repo, manifest: path.join(repo, ".jinn-build", "deliverable-evidence.json") }
+  return { home, repo, manifest: path.join(repo, ".hundredfold-build", "deliverable-evidence.json") }
 }
 
 function writeManifest(manifest, value) {
@@ -159,7 +159,7 @@ function route(stream, ...args) {
   return { status: result.status, out: `${result.stdout}${result.stderr}` }
 }
 
-const DOCS_ONLY = diff("M", "docs/architecture.md", "A", ".jinn-build/notes.json")
+const DOCS_ONLY = diff("M", "docs/architecture.md", "A", ".hundredfold-build/notes.json")
 const TOUCHES_SOURCE = diff("M", "docs/architecture.md", "M", "packages/gateway/src/server.ts")
 
 test("route honours a workspace declaration when the diff is empty or non-shipping", () => {

@@ -1,5 +1,5 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react"
-import type { GatewayEvent } from "@jinn/gateway-events"
+import type { GatewayEvent } from "@hundredfold/gateway-events"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { queryClient } from "@/lib/query-client"
 import { buildScreenContext } from "../context/surface-adapters"

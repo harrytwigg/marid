@@ -2,7 +2,7 @@
 // The incidents this repo keeps re-living, as a check. Every rule below is
 // something that actually broke: a personal path published to npm, a sandbox
 // served on the production port, a home derived from a literal that ignored
-// JINN_HOME, an env read that drifted away from the config layer, a spawn whose
+// HUNDREDFOLD_HOME, an env read that drifted away from the config layer, a spawn whose
 // unread pipe deadlocked once the child filled it.
 //
 // The gate is diff-scoped on purpose. Tree-wide these rules match hundreds of
@@ -15,10 +15,12 @@
 // in YAML and shell). A suppression with no reason still suppresses, but the run
 // lists it as unaudited — otherwise `git grep 'footgun: ok'` stops being worth
 // reading, which is the only thing that makes inline suppression safe.
+import { LEGACY } from "./legacy-names.mjs"
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
+import { renameText } from "./rename-codename/engine.mjs"
 import { RAW_BACKDROP_BLUR } from "./footguns/backdrop-blur.mjs"
 import { findLeaks, loadPrivateTerms, PRIVATE_TERMS_DEFAULT } from "./footguns/privacy-leak.mjs"
 import { REMOVED_UI_LIBRARY } from "./footguns/removed-ui-libraries.mjs"
@@ -71,27 +73,30 @@ const RULES = [
   {
     name: "personal-path",
     message: "an absolute /Users/ path — this repo is published to npm, and the path names its author's machine",
-    fix: "Derive the path at runtime — resolveJinnHome(), os.homedir(), or mkdtempSync(os.tmpdir()) in a fixture — or write a neutral placeholder.",
+    fix: "Derive the path at runtime — resolveHundredfoldHome(), os.homedir(), or mkdtempSync(os.tmpdir()) in a fixture — or write a neutral placeholder.",
     scans: (relPath) => extensionIn(relPath, TEXT_EXTENSIONS) && !FROZEN_MIGRATIONS.test(relPath),
     find: (text) => matchingLines(text, /\/Users\//),
   },
   {
     name: "hardcoded-home",
-    message: "a .jinn home built from the user's home directory — it ignores JINN_HOME and JINN_INSTANCE, so it reads the wrong instance",
-    fix: "Call resolveJinnHome() from src/shared/home.ts, which honours JINN_HOME first and JINN_INSTANCE second.",
+    message: "a .hundredfold home built from the user's home directory — it ignores HUNDREDFOLD_HOME and HUNDREDFOLD_INSTANCE, so it reads the wrong instance",
+    fix: "Call resolveHundredfoldHome() from src/shared/home.ts, which honours HUNDREDFOLD_HOME first and HUNDREDFOLD_INSTANCE second.",
     allow: new Set([
-      "packages/jinn/src/shared/home.ts",
-      "packages/jinn/src/shared/paths.ts",
-      "packages/jinn/src/instances/directory.ts",
+      "packages/hundredfold/src/shared/home.ts",
+      "packages/hundredfold/src/shared/paths.ts",
+      "packages/hundredfold/src/instances/directory.ts",
+      // Names the real home in order to refuse to run a test against it.
+      "packages/hundredfold/vitest.test-home.ts",
     ]),
     scans: (relPath) => underPackages(relPath) && extensionIn(relPath, CODE_EXTENSIONS),
     // Both halves must be on one line: the home call, and a literal that names a
-    // `.jinn` directory. Other tools' homes (".codex", ".grok", ".gemini") are
+    // `.hundredfold` directory. Other tools' homes (".codex", ".grok", ".gemini") are
     // ours to hardcode — they are those tools' contracts, not our instance root.
     find: (text) =>
       matchingLines(
         text,
-        /(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'`]\.jinn[\w-]*["'`]/,
+        // The current name and the one an older build used: a home hardcoded under either reads the wrong instance.
+        new RegExp(String.raw`(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'\x60]\.(?:hundredfold|${LEGACY.codename})[\w-]*["'\x60]`),
       ),
   },
   {
@@ -106,10 +111,10 @@ const RULES = [
     message: "a literal gateway port — 7777 is the production gateway and 7788 the operator's demo instance, and whatever owns that port gets killed by the lifecycle",
     fix: "Read the port from the loaded config or take it as a parameter. DEFAULT_CONFIG in src/cli/setup.ts is the one place the literal belongs.",
     allow: new Set([
-      "packages/jinn/src/shared/config.ts",
-      "packages/jinn/src/cli/setup.ts",
-      "packages/jinn/src/instances/directory.ts",
-      "packages/jinn/src/instances/create.ts",
+      "packages/hundredfold/src/shared/config.ts",
+      "packages/hundredfold/src/cli/setup.ts",
+      "packages/hundredfold/src/instances/directory.ts",
+      "packages/hundredfold/src/instances/create.ts",
       "packages/web/vite.config.ts",
     ]),
     scans: (relPath) => underPackages(relPath) && extensionIn(relPath, CODE_EXTENSIONS),
@@ -118,19 +123,19 @@ const RULES = [
   {
     name: "scattered-env",
     // Scoped to packages/*/src: the CLI entry, the Vitest harness and the Vite
-    // config all read env by definition, and tests set JINN_HOME to isolate
+    // config all read env by definition, and tests set HUNDREDFOLD_HOME to isolate
     // themselves, which is the behaviour we want rather than a footgun.
-    message: "a process.env read outside the config layer — env handling spread across modules is how JINN_HOME drifts between the gateway and the children it spawns",
-    fix: "Read it through loadConfig() or resolveJinnHome(), or thread it in as a parameter (`env: NodeJS.ProcessEnv = process.env`) so a caller can override it.",
+    message: "a process.env read outside the config layer — env handling spread across modules is how HUNDREDFOLD_HOME drifts between the gateway and the children it spawns",
+    fix: "Read it through loadConfig() or resolveHundredfoldHome(), or thread it in as a parameter (`env: NodeJS.ProcessEnv = process.env`) so a caller can override it.",
     allow: new Set([
-      "packages/jinn/src/shared/config.ts",
-      "packages/jinn/src/shared/home.ts",
-      "packages/jinn/src/shared/paths.ts",
-      "packages/jinn/src/shared/child-env.ts",
-      "packages/jinn/src/mcp/env-scrub.ts",
-      "packages/jinn/src/mcp/scrub-entry.ts",
-      "packages/jinn/src/mcp/server-entry.ts",
-      "packages/jinn/src/cli/container-contract.ts",
+      "packages/hundredfold/src/shared/config.ts",
+      "packages/hundredfold/src/shared/home.ts",
+      "packages/hundredfold/src/shared/paths.ts",
+      "packages/hundredfold/src/shared/child-env.ts",
+      "packages/hundredfold/src/mcp/env-scrub.ts",
+      "packages/hundredfold/src/mcp/scrub-entry.ts",
+      "packages/hundredfold/src/mcp/server-entry.ts",
+      "packages/hundredfold/src/cli/container-contract.ts",
     ]),
     scans: (relPath) =>
       /^packages\/[^/]+\/src\//.test(relPath) && extensionIn(relPath, CODE_EXTENSIONS) && !isTest(relPath),
@@ -270,35 +275,52 @@ function trackedFiles() {
  */
 function addedLines(diff) {
   const byFile = new Map()
-  let lines = null
-  let inHeader = false
-  let lineNumber = 0
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      lines = null
-      inHeader = true
-      continue
-    }
-    if (inHeader) {
-      if (!line.startsWith("+++ ")) continue
-      inHeader = false
-      const target = line.slice(4)
-      if (target === "/dev/null") continue
-      lines = new Set()
-      byFile.set(target.replace(/^b\//, ""), lines)
-      continue
-    }
-    if (line.startsWith("@@")) {
-      const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(line)
-      if (hunk) lineNumber = Number(hunk[1])
-      continue
-    }
-    if (lines && line.startsWith("+")) {
-      lines.add(lineNumber)
-      lineNumber += 1
-    }
-  }
+  const state = { lines: null, inHeader: false, lineNumber: 0, removed: new Set() }
+  for (const line of diff.split("\n")) readDiffLine(line, state, byFile)
   return byFile
+}
+
+function readDiffLine(line, state, byFile) {
+  if (line.startsWith("diff --git ") || state.inHeader) {
+    readHeaderLine(line, state, byFile)
+    return
+  }
+  if (line.startsWith("@@")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(line)
+    if (hunk) state.lineNumber = Number(hunk[1])
+    state.removed = new Set()
+    return
+  }
+  if (!state.lines) return
+  if (line.startsWith("-")) state.removed.add(renamedOrSame(line.slice(1)))
+  if (!line.startsWith("+")) return
+  // A line that only changed because the product's name did was already there: it is not new.
+  if (!state.removed.has(line.slice(1))) state.lines.add(state.lineNumber)
+  state.lineNumber += 1
+}
+
+/** The line as the rename would write it, or as it is when it holds something the rename cannot map (a hash or a data URI that happens to spell a name). */
+function renamedOrSame(text) {
+  try {
+    return renameText(text, []).text
+  } catch {
+    return text
+  }
+}
+
+/** The header between `diff --git` and the first hunk: only its `+++` line says which file the hunks belong to. */
+function readHeaderLine(line, state, byFile) {
+  if (line.startsWith("diff --git ")) {
+    state.lines = null
+    state.inHeader = true
+    return
+  }
+  if (!line.startsWith("+++ ")) return
+  state.inHeader = false
+  const target = line.slice(4)
+  if (target === "/dev/null") return
+  state.lines = new Set()
+  byFile.set(target.replace(/^b\//, ""), state.lines)
 }
 
 function diffTarget(mode, ref) {

@@ -26,7 +26,7 @@ This is a strong chain but it is INFERENCE, not a measured value.
 
 ## REAL FINDING (verified, important)
 The LIVE gateway's own env has CLAUDE_CODE_ENTRYPOINT=sdk-cli and CLAUDECODE=1
-(inherited because the deploy ran inside this jinn-dev AGENT's shell, itself a
+(inherited because the deploy ran inside this hundredfold-dev AGENT's shell, itself a
 claude-code process). If the engine did NOT strip env, main.tsx:519 would make every
 child inherit sdk-cli ⇒ DE-SUBSIDIZED. buildPtyEnv's strip is therefore LOAD-BEARING
 for subsidy. (Confirmed the strip exists and removes both vars.)
@@ -34,7 +34,7 @@ for subsidy. (Confirmed the strip exists and removes both vars.)
 ## EMPIRICAL: NOT captured this session (honest)
 Attempts that failed to yield an attributable value:
 - Transcript read: ~/.claude/projects/<repo-id>/ is polluted by every
-  claude with cwd ~/.jinn (incl. this agent) ⇒ not attributable.
+  claude with cwd ~/.hundredfold (incl. this agent) ⇒ not attributable.
 - Forced --session-id PTY spawns: transcript "NOT FOUND" in-window (throwaway spawn
   killed before persist).
 - SessionStart-hook capture (printf $CLAUDE_CODE_ENTRYPOINT > file): hook did not fire

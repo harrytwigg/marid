@@ -221,7 +221,7 @@ describe('closing every tab from the tab bar', () => {
     expect(stored(SPLIT_LAYOUT_STORAGE_KEY).root).toBeNull()
   })
 
-  it('asks the open-chats list to clear itself, which is what empties jinn-chat-tabs', async () => {
+  it('asks the open-chats list to clear itself, which is what empties hundredfold-chat-tabs', async () => {
     // The list the page reads is mocked here, so this pins the call; use-chat-tabs.test.ts pins that
     // the call empties the stored key. Removing either half leaves a reload that still has tabs.
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })

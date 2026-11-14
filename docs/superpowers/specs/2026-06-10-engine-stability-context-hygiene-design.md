@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-10
 **Status:** Approved
-**Scope:** `packages/jinn` (engines, gateway, sessions, template), `packages/web` (only if reconciler events need UI handling)
+**Scope:** `packages/hundredfold` (engines, gateway, sessions, template), `packages/web` (only if reconciler events need UI handling)
 
 ## Problem
 
@@ -27,7 +27,7 @@ Two classes of issues:
 2. **Context stuffing.** `buildContext()` (`src/sessions/context.ts`) injects the same
    payload into every session regardless of audience: full org roster with persona
    previews, full cron list, connector curl recipes, and the complete gateway API table.
-   Meanwhile each engine *also* auto-ingests `~/.jinn/CLAUDE.md`/`AGENTS.md` (one symlinked
+   Meanwhile each engine *also* auto-ingests `~/.hundredfold/CLAUDE.md`/`AGENTS.md` (one symlinked
    file), so static content (API table, connector recipes) is delivered twice. Employee
    child sessions — the most numerous session type (cron pipelines) — ingest the full
    COO manual plus an org-wide context they don't need, with their persona injected on
@@ -112,7 +112,7 @@ refactor (deliberately rejected in favor of targeted fixes).
 ### 2b. Static/dynamic dedupe
 
 Content identical across all sessions moves into the engine-ingested static file
-(`~/.jinn/CLAUDE.md` = `AGENTS.md`) and is **removed from injection**:
+(`~/.hundredfold/CLAUDE.md` = `AGENTS.md`) and is **removed from injection**:
 
 - Gateway API reference table (`buildApiReference`)
 - Connector curl recipe boilerplate (`buildConnectorContext` keeps only dynamic values:
@@ -128,8 +128,8 @@ The static file is restructured into:
    injected session context does not name an employee. Injected employee personas
    override it by construction.
 
-Applied to `packages/jinn/template/CLAUDE.md` (fresh installs) and, by hand, to the
-operator's live `~/.jinn/CLAUDE.md` (preserving instance-specific custom content).
+Applied to `packages/hundredfold/template/CLAUDE.md` (fresh installs) and, by hand, to the
+operator's live `~/.hundredfold/CLAUDE.md` (preserving instance-specific custom content).
 No automated migration of user-edited CLAUDE.md files — users own that file; the
 template change benefits new installs and the release notes describe the manual step.
 
@@ -137,7 +137,7 @@ template change benefits new installs and the release notes describe the manual 
 
 `buildOrgContext` collapses to a hierarchy tree of `Name (slug) — dept, rank` with no
 persona previews, plus one pointer: full details via `GET /api/org/employees/:name` or
-the YAML under `~/.jinn/org/`. For a ~40-employee org: ~5K chars → ~1.5K.
+the YAML under `~/.hundredfold/org/`. For a ~40-employee org: ~5K chars → ~1.5K.
 
 **Expected net effect:** COO injected context ≈ 9K → 4K chars; employee sessions
 ≈ 10K → 3K; multiplied across dozens of daily cron-spawned employee sessions.
@@ -161,7 +161,7 @@ TDD (vitest) throughout:
 - Reconciler: fake-clock tests for both drift directions, no-op on healthy sessions.
 - `buildContext`: scoping snapshots for COO / manager / non-manager; dedupe assertions
   (API table absent from injection; dynamic connector values present).
-- Full existing `jinn-cli` + `@jinn/web` suites stay green; typecheck both packages.
+- Full existing `hundredfold` + `@hundredfold/web` suites stay green; typecheck both packages.
 
 ## Rollout
 

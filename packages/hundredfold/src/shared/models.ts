@@ -1,0 +1,870 @@
+import type {
+  HundredfoldConfig,
+  ModelInfo,
+  ModelRegistry,
+  EngineRegistryEntry,
+  EffortMechanism,
+  EngineModelsConfig,
+} from "./types.js";
+import { logger } from "./logger.js";
+import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredentialStatus } from "./claude-auth.js";
+import { resolveBin, isInstalled } from "./resolve-bin.js";
+import { discoverPiModels } from "./pi-models.js";
+import { withConfiguredOverrides } from "./opencode-models.js";
+import { opencodeCatalogue, opencodeClones, opencodeLocalApi, refreshOpencodeCatalogue, setOpencodeLocalApi } from "./opencode-catalogue.js";
+import { localOpencodeVersion } from "./opencode-bin-version.js";
+import { opencodeApiOf } from "../engines/opencode-version.js";
+import { stagedOpencodeAccounts } from "./opencode-accounts-config.js";
+import { accountRegistryModels } from "./opencode-accounts.js";
+import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
+import { buildMusecodeEntry } from "./musecode-registry.js";
+export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
+import {
+  CLAUDE_ALIAS_IDS,
+  discoverClaudeEffortLevels,
+  discoverClaudeModels,
+  knownClaudeModels,
+  type ClaudeModelDiscovery,
+} from "./claude-models.js";
+import {
+  discoverCodexModels,
+  type CodexModelDiscovery,
+} from "./codex-models.js";
+import {
+  discoverAntigravityModels,
+  type AntigravityModelDiscovery,
+} from "./antigravity-models.js";
+import {
+  discoverGrokModels,
+  GROK_EFFORT_LEVELS,
+  knownGrokModels,
+  type GrokModelDiscovery,
+} from "./grok-models.js";
+import {
+  discoverHermesModels,
+  knownHermesModels,
+  HERMES_EFFORT_LEVELS,
+  type HermesModelDiscovery,
+} from "./hermes-models.js";
+
+/**
+ * Model + capability registry — the single source of truth for which engines and
+ * models exist and what they support (effort levels, availability).
+ *
+ * Sources, in precedence order per engine:
+ *   1. Dynamic discovery, refreshed at boot and on config reload into
+ *      snapshots that the (synchronous) registry reads.
+ *   2. The optional `models:` block in config.yaml.
+ *   3. Synthesis from `engines.<name>.model` (back-compat default).
+ *
+ * `available` reflects whether the engine's binary is actually installed, so the
+ * UI can hide engines you don't have.
+ */
+
+/** Engines registered in this build (mirrors server.ts engine map). */
+export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode", "musecode"] as const;
+export type EngineName = (typeof ENGINE_NAMES)[number];
+export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode", "musecode"] as const; // engines with a /ws/pty view
+export type PtyViewEngineName = (typeof PTY_VIEW_ENGINE_NAMES)[number];
+/** Engines whose terminal and chat turns cannot share a session, so the view switch locks while a turn runs. */
+const PTY_LOCKED_DURING_TURN_ENGINES: ReadonlySet<string> = new Set(["codex", "musecode"]);
+
+/**
+ * Whether the dashboard should offer `name`'s terminal view under `config`.
+ *
+ * opencode's view is an `opencode attach` client on the session's server, and
+ * there is only a server in `engines.opencode.mode: server` — in the default
+ * `run` mode every turn is its own short-lived process with nothing to attach
+ * to, so the view is not offered at all rather than offered and then refused.
+ */
+export function engineOffersPty(name: string, config: Pick<HundredfoldConfig, "engines"> | undefined): boolean {
+  if (!(PTY_VIEW_ENGINE_NAMES as readonly string[]).includes(name)) return false;
+  if (name === "opencode") return config?.engines?.opencode?.mode === "server";
+  return true;
+}
+
+/**
+ * Engines that know how to relocate a turn onto another machine over SSH.
+ *
+ * Membership is a property of the ENGINE ADAPTER, not of the CLI it drives:
+ * each of these branches on `remoteHost` and spawns `ssh` instead of its own
+ * binary (`claude-interactive.ts` `spawnRemote`, `pi.ts` and `opencode.ts`
+ * `runRemote`, `musecode.ts` `spawnRemoteHost`). Every other adapter ignores the field entirely and would run
+ * the turn on the gateway — with `--dangerously-skip-permissions`, against a
+ * checkout that is not there — while the UI showed a remote employee working
+ * normally.
+ *
+ * Read by the turn gate (`sessions/turn/remote-ready.ts`), by the rate-limit
+ * substitution walker, and by the new-session engine preference, so that a
+ * remote employee is never handed to an engine that would silently bring the
+ * work back here.
+ */
+export const REMOTE_ENGINE_NAMES = ["claude", "pi", "opencode", "musecode"] as const;
+export type RemoteEngineName = (typeof REMOTE_ENGINE_NAMES)[number];
+
+/** The command each remote engine runs on a host, which is not always the
+ *  engine's name: the `musecode` engine drives Muse Code's `muse`. What an
+ *  operator is told to look for with `command -v`, so it is the real binary. */
+export const REMOTE_ENGINE_CLI: Record<RemoteEngineName, string> = {
+  claude: "claude",
+  pi: "pi",
+  opencode: "opencode",
+  musecode: "muse",
+};
+
+/** Type guard: can `name`'s adapter run a turn on another host? */
+export function engineSupportsRemote(name: string): name is RemoteEngineName {
+  return (REMOTE_ENGINE_NAMES as readonly string[]).includes(name);
+}
+
+/**
+ * Engines whose model catalog exists ONLY once discovery has run.
+ *
+ * Every engine here discovers its models from its CLI, but the others also ship
+ * a known offline catalog, so an id outside it really is a typo. These have
+ * nothing to fall back on: the catalog is whatever providers the operator
+ * configured on this machine, and it is empty for the first moments after a
+ * restart and whenever discovery fails. Refusing an unrecognised id there would
+ * reject an employee's own configured model for reasons that have nothing to do
+ * with the model — so the id is allowed through with a warning, and the engine
+ * reports the real error if it turns out to be wrong.
+ */
+const DYNAMIC_CATALOG_ENGINES: ReadonlySet<string> = new Set(["pi", "opencode", "musecode"]);
+
+/** Whether an unrecognised model id for `engine` should be allowed through. */
+export function hasDynamicModelCatalog(engine: string): boolean {
+  return DYNAMIC_CATALOG_ENGINES.has(engine);
+}
+
+/** Binary name probed for each engine's availability (override via engines.<name>.bin). */
+const ENGINE_BIN: Record<EngineName, string> = {
+  claude: "claude",
+  codex: "codex",
+  antigravity: "agy",
+  grok: "grok",
+  pi: "pi",
+  hermes: "hermes",
+  opencode: "opencode",
+  musecode: "muse",
+};
+
+const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
+  claude: "claude-flag",
+  codex: "codex-config",
+  antigravity: "none",
+  grok: "grok-flag",
+  pi: "pi-flag",
+  hermes: "none",
+  // A model's variants are its effort levels; opencode lists them per model.
+  opencode: "opencode-variant",
+  musecode: "musecode-turn",
+};
+
+export const CODEX_DEFAULT_MODEL = "gpt-5.5";
+
+/** Conservative per-engine defaults used when synthesizing (no `models:` block). */
+const SYNTH_DEFAULTS: Record<EngineName, { supportsEffort: boolean; effortLevels: string[]; fallbackModel: string }> = {
+  claude: { supportsEffort: true, effortLevels: ["low", "medium", "high", "xhigh", "max"], fallbackModel: "opus" },
+  codex: { supportsEffort: true, effortLevels: ["low", "medium", "high", "xhigh"], fallbackModel: CODEX_DEFAULT_MODEL },
+  antigravity: { supportsEffort: false, effortLevels: [], fallbackModel: "Gemini 3.5 Flash (Medium)" },
+  grok: { supportsEffort: true, effortLevels: GROK_EFFORT_LEVELS, fallbackModel: "grok-build" },
+  // Placeholder shown only in the brief window before pi discovery completes; the
+  // provider/id form keeps it well-typed for the engine's split.
+  pi: { supportsEffort: false, effortLevels: [], fallbackModel: "ollama/gemma4:12b" },
+  hermes: { supportsEffort: false, effortLevels: HERMES_EFFORT_LEVELS, fallbackModel: "openai-codex:gpt-5.5" },
+  // Placeholder shown only in the brief window before opencode discovery
+  // completes; the provider/id form is what the engine hands back to `-m`.
+  opencode: { supportsEffort: false, effortLevels: [], fallbackModel: "anthropic/claude-sonnet-5" },
+  musecode: { supportsEffort: true, effortLevels: [...MUSECODE_EFFORT_LEVELS], fallbackModel: "muse-spark-1.2" },
+};
+
+/** Optional per-engine `bin` override from config. */
+function engineBinOverride(config: HundredfoldConfig, name: EngineName): string | undefined {
+  return (config.engines as unknown as Record<string, { bin?: string } | undefined>)[name]?.bin;
+}
+
+/** Whether an engine's binary is installed (gates UI visibility). */
+export function engineAvailable(config: HundredfoldConfig, name: EngineName): boolean {
+  const bin = ENGINE_BIN[name];
+  // Unknown engine name (e.g. a typo in config.sessions.fallbackEngine) → not available.
+  if (!bin) return false;
+  return isInstalled(bin, engineBinOverride(config, name));
+}
+
+/** Type guard: is `name` one of the known engines? */
+export function isKnownEngine(name: string): name is EngineName {
+  return (ENGINE_NAMES as readonly string[]).includes(name);
+}
+
+/**
+ * Engines a previous release shipped and this build no longer does, with the
+ * release that removed them. A roster entry or cron job written before the
+ * removal still names one, and "Engine not available" alone reads like a missing
+ * binary rather than a name that no longer exists.
+ */
+const REMOVED_ENGINES: Readonly<Record<string, { label: string; removedIn: string }>> = {
+  freebuff: { label: "Freebuff", removedIn: "0.34.0" },
+};
+
+/** Why `name` is an engine this build removed, in words an operator can act on; undefined when it is not one. */
+export function removedEngineProblem(name: string): string | undefined {
+  const removed = REMOVED_ENGINES[name.trim().toLowerCase()];
+  if (!removed) return undefined;
+  return `engine "${name}" is not available — the ${removed.label} engine was removed in ${removed.removedIn}. Use one of: ${ENGINE_NAMES.join(", ")}`;
+}
+
+/** Install hint per engine, surfaced when a missing CLI blocks a session. */
+const ENGINE_INSTALL_HINT: Record<EngineName, string> = {
+  claude: "npm install -g @anthropic-ai/claude-code",
+  codex: "npm install -g @openai/codex",
+  antigravity: "install the Antigravity CLI (agy)",
+  grok: "npm install -g @xai-official/grok, then run grok once to authenticate",
+  pi: "install the Pi CLI",
+  hermes: "install the Hermes CLI: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash",
+  opencode: "install the opencode CLI: curl -fsSL https://opencode.ai/install | bash, then run `opencode auth login`",
+  musecode: "install Muse Code: curl -fsSL https://dev.meta.ai/install.sh | bash, then run `muse login` or set META_API_KEY",
+};
+
+/** Actionable error message for a session blocked by a missing engine binary. */
+export function engineUnavailableMessage(config: HundredfoldConfig, name: EngineName): string {
+  const bin = engineBinOverride(config, name) || ENGINE_BIN[name];
+  return `Engine "${name}" is not available — the "${bin}" CLI was not found on your PATH. Install it (${ENGINE_INSTALL_HINT[name]}) or set engines.${name}.bin in config.yaml to its full path, then retry.`;
+}
+
+/** Snapshot of dynamically-discovered Pi models (null until first discovery). */
+let discoveredPiModels: ModelInfo[] | null = null;
+/** Snapshot of dynamically-discovered Claude models (null until first discovery). */
+let discoveredClaudeModels: ClaudeModelDiscovery | null = null;
+/** Snapshot of Claude Code's read-only `--effort` options (null until first discovery). */
+let discoveredClaudeEffortLevels: string[] | null = null;
+/** Snapshot of dynamically-discovered Codex models (null until first discovery). */
+let discoveredCodexModels: CodexModelDiscovery | null = null;
+/** Snapshot of dynamically-discovered Antigravity models (null until first discovery). */
+let discoveredAntigravityModels: AntigravityModelDiscovery | null = null;
+/** Snapshot of dynamically-discovered Grok models (null until first discovery). */
+let discoveredGrokModels: GrokModelDiscovery | null = null;
+/** Snapshot of dynamically-discovered Hermes models (null until first discovery). */
+let discoveredHermesModels: HermesModelDiscovery | null = null;
+
+/**
+ * Discover Claude's catalog through Claude Code OAuth. This is best-effort and
+ * read-only; it never validates a model by starting a Claude turn.
+ */
+export async function refreshClaudeModels(config: HundredfoldConfig): Promise<boolean> {
+  if (!engineAvailable(config, "claude")) {
+    discoveredClaudeModels = null;
+    discoveredClaudeEffortLevels = null;
+    invalidateModelRegistry();
+    return false;
+  }
+  try {
+    const bin = resolveBin("claude", engineBinOverride(config, "claude"));
+    discoveredClaudeEffortLevels = await discoverClaudeEffortLevels(bin);
+    const discovered = await discoverClaudeModels({
+      effortLevels: discoveredClaudeEffortLevels.length > 0 ? discoveredClaudeEffortLevels : undefined,
+    });
+    // `true` = the catalog GET authenticated with the token on disk; the caller
+    // tells the auth watch, which this module must not import. On zero models
+    // the last good catalog is kept — the models did not stop existing because
+    // the token lapsed — and the credential reader says whether a login is the fix.
+    if (discovered.models.length > 0) {
+      discoveredClaudeModels = discovered;
+      logger.info(`Claude model discovery: ${discovered.models.length} model(s)`);
+      return true;
+    }
+    logClaudeCatalogShortfall(readClaudeCredentialStatus(), discoveredClaudeModels !== null);
+  } catch (err) {
+    discoveredClaudeModels = keepClaudeCatalogAfter(err, discoveredClaudeModels, readClaudeCredentialStatus());
+  } finally {
+    invalidateModelRegistry();
+  }
+  return false;
+}
+
+export function setDiscoveredClaudeModelsForTest(models: ClaudeModelDiscovery | null): void {
+  discoveredClaudeModels = models;
+  discoveredClaudeEffortLevels = null;
+  invalidateModelRegistry();
+}
+
+/** Discover Codex's model catalog (`codex debug models`) and refresh the registry. */
+export async function refreshCodexModels(config: HundredfoldConfig): Promise<void> {
+  if (!engineAvailable(config, "codex")) {
+    discoveredCodexModels = null;
+    invalidateModelRegistry();
+    return;
+  }
+  try {
+    const bin = resolveBin("codex", engineBinOverride(config, "codex"));
+    discoveredCodexModels = await discoverCodexModels(bin);
+    logger.info(`Codex model discovery: ${discoveredCodexModels.models.length} model(s)`);
+  } catch (err) {
+    logger.warn(`Codex model discovery failed: ${err instanceof Error ? err.message : err}`);
+    discoveredCodexModels = null;
+  } finally {
+    invalidateModelRegistry();
+  }
+}
+
+/** Discover Antigravity's model catalog (`agy models`) and refresh the registry. */
+export async function refreshAntigravityModels(config: HundredfoldConfig): Promise<void> {
+  if (!engineAvailable(config, "antigravity")) {
+    discoveredAntigravityModels = null;
+    invalidateModelRegistry();
+    return;
+  }
+  try {
+    const bin = resolveBin("agy", engineBinOverride(config, "antigravity"));
+    discoveredAntigravityModels = await discoverAntigravityModels(bin);
+    logger.info(`Antigravity model discovery: ${discoveredAntigravityModels.models.length} model(s)`);
+  } catch (err) {
+    logger.warn(`Antigravity model discovery failed: ${err instanceof Error ? err.message : err}`);
+    discoveredAntigravityModels = null;
+  } finally {
+    invalidateModelRegistry();
+  }
+}
+
+/**
+ * Discover Pi's local/custom models (`pi --list-models`) and refresh the registry.
+ * Async — populates a snapshot the synchronous registry reads. Never throws;
+ * degrades to the config/synthesized fallback when Pi is absent or discovery fails.
+ */
+export async function refreshPiModels(config: HundredfoldConfig): Promise<void> {
+  if (!engineAvailable(config, "pi")) {
+    discoveredPiModels = null;
+    invalidateModelRegistry();
+    return;
+  }
+  try {
+    const bin = resolveBin("pi", engineBinOverride(config, "pi"));
+    discoveredPiModels = await discoverPiModels(bin);
+    logger.info(`Pi model discovery: ${discoveredPiModels.length} local model(s)`);
+  } catch (err) {
+    logger.warn(`Pi model discovery failed: ${err instanceof Error ? err.message : err}`);
+    discoveredPiModels = null;
+  } finally {
+    invalidateModelRegistry();
+  }
+}
+
+/**
+ * Discover the models the installed opencode CLI can reach (`opencode models`)
+ * and refresh the registry. Async — populates a snapshot the synchronous
+ * registry reads (`opencode-catalogue.ts`, which also lands details that arrive
+ * after this returns). Never throws; degrades to the config/synthesized
+ * fallback when opencode is absent or discovery fails. `opts.env` is what the
+ * discovery runs start with (`opencodeDiscoveryEnv`), supplied by callers
+ * because `shared/` cannot import the engine that defines it.
+ */
+export async function refreshOpencodeModels(
+  config: HundredfoldConfig,
+  opts: { secondLook?: boolean; env?: Record<string, string> } = {},
+): Promise<void> {
+  const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
+  // The models of every base provider an account names are kept in full, to stage the account's provider block from.
+  const cloneProviders = [...new Set(stagedOpencodeAccounts(config).map((account) => account.base!))];
+  // The binary's generation decides which account models the registry lists (a 1.x binary cannot serve the ones off the main endpoint). Only read when an account could be affected, and left unknown when the binary cannot say.
+  const version = bin && cloneProviders.length > 0 ? await localOpencodeVersion(bin) : undefined;
+  setOpencodeLocalApi(version === undefined ? undefined : opencodeApiOf(version));
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env, cloneProviders);
+}
+
+/**
+ * Discover Grok's authenticated model list (`grok models`) and refresh the registry.
+ * Never throws; until discovery succeeds the registry uses Hundredfold's known Grok model
+ * catalog so the UI still shows the public Grok choices.
+ */
+export async function refreshGrokModels(config: HundredfoldConfig): Promise<void> {
+  if (!engineAvailable(config, "grok")) {
+    discoveredGrokModels = null;
+    invalidateModelRegistry();
+    return;
+  }
+  try {
+    const bin = resolveBin("grok", engineBinOverride(config, "grok"));
+    discoveredGrokModels = await discoverGrokModels(bin);
+    logger.info(`Grok model discovery: ${discoveredGrokModels.models.length} model(s)`);
+  } catch (err) {
+    logger.warn(`Grok model discovery failed: ${err instanceof Error ? err.message : err}`);
+    discoveredGrokModels = null;
+  } finally {
+    invalidateModelRegistry();
+  }
+}
+
+/**
+ * Discover Hermes's available model list and refresh the registry.
+ * Never throws; until discovery succeeds the registry uses Hundredfold's known Hermes model
+ * catalog so the UI still shows the public Hermes choices.
+ */
+export async function refreshHermesModels(config: HundredfoldConfig): Promise<void> {
+  if (!engineAvailable(config, "hermes")) {
+    discoveredHermesModels = null;
+    invalidateModelRegistry();
+    return;
+  }
+  try {
+    const bin = resolveBin("hermes", engineBinOverride(config, "hermes"));
+    discoveredHermesModels = await discoverHermesModels(bin);
+    logger.info(`Hermes model discovery: ${discoveredHermesModels.models.length} model(s)`);
+  } catch (err) {
+    logger.warn(`Hermes model discovery failed: ${err instanceof Error ? err.message : err}`);
+    discoveredHermesModels = null;
+  } finally {
+    invalidateModelRegistry();
+  }
+}
+
+let cached: ModelRegistry | null = null;
+
+/** Clear the cached registry. Call on config reload / PUT /api/config. */
+export function invalidateModelRegistry(): void {
+  cached = null;
+}
+
+/** Resolve the registry (cached). Pass the current config; cache is keyed by
+ *  invalidation, not by config identity — call invalidateModelRegistry() to refresh. */
+export function getModelRegistry(config: HundredfoldConfig): ModelRegistry {
+  if (!cached) cached = buildRegistry(config);
+  return cached;
+}
+
+/**
+ * Valid effort levels for a session's engine+model, from the registry.
+ * Returns [] when the engine/model doesn't support effort (e.g. antigravity) or
+ * the engine is unknown. `modelId` defaults to the engine's default model.
+ */
+export function effortLevelsForModel(config: HundredfoldConfig, engine: string, modelId?: string): string[] {
+  const entry = getModelRegistry(config)[engine];
+  if (!entry) return [];
+  const model =
+    (modelId ? entry.models.find((m) => m.id === modelId) : undefined) ??
+    entry.models.find((m) => m.id === entry.defaultModel) ??
+    entry.models[0];
+  return model?.supportsEffort ? model.effortLevels : [];
+}
+
+/**
+ * The effort levels the registry lists for exactly this model: none for a model
+ * it does not list, and none without a model, where {@link effortLevelsForModel}
+ * would answer for the engine's default. For an engine that sends the level to
+ * the model itself (opencode's variants) and must never send one the model lacks.
+ */
+export function exactEffortLevelsForModel(config: HundredfoldConfig, engine: string, modelId: string | undefined): string[] {
+  const model = modelId ? getModelRegistry(config)[engine]?.models.find((m) => m.id === modelId) : undefined;
+  return model?.supportsEffort ? model.effortLevels : [];
+}
+
+/** Build the registry without touching the cache (used by getModelRegistry + tests). */
+export function buildRegistry(config: HundredfoldConfig): ModelRegistry {
+  const synthesized = synthesizeFromEngineConfig(config);
+  const block = config.models;
+
+  const registry: ModelRegistry = {};
+  for (const name of ENGINE_NAMES) {
+    const available = engineAvailable(config, name);
+    // Dynamic engine model discovery overrides
+    // both the config block and synthesis.
+    if (name === "claude") {
+      registry[name] = buildClaudeEntry(config, block?.claude, synthesized[name], available);
+      continue;
+    }
+    if (name === "codex") {
+      registry[name] = buildCodexEntry(config, block?.codex, synthesized[name], available);
+      continue;
+    }
+    if (name === "antigravity") {
+      registry[name] = buildAntigravityEntry(config, block?.antigravity, synthesized[name], available);
+      continue;
+    }
+    if (name === "pi") {
+      registry[name] = buildPiEntry(config, block?.pi, synthesized[name], available);
+      continue;
+    }
+    if (name === "grok") {
+      registry[name] = buildGrokEntry(config, block?.grok, synthesized[name], available);
+      continue;
+    }
+    if (name === "hermes") {
+      registry[name] = buildHermesEntry(config, block?.hermes, synthesized[name], available);
+      continue;
+    }
+    if (name === "opencode") {
+      registry[name] = buildOpencodeEntry(config, block?.opencode, synthesized[name], available);
+      continue;
+    }
+    if (name === "musecode") { registry[name] = buildMusecodeEntry(config, block?.musecode, synthesized[name], available, (b, p) => fromEngineModelsConfig(name, b, available, p)); continue }
+    const engineBlock = block?.[name];
+    registry[name] = engineBlock
+      ? fromEngineModelsConfig(name, engineBlock, available)
+      : synthesized[name]; // engine omitted from the block → keep the synthesized entry
+  }
+  return Object.fromEntries(ENGINE_NAMES.map((n) => [n, { ...registry[n], supportsPty: engineOffersPty(n, config), ptyLockedDuringTurn: PTY_LOCKED_DURING_TURN_ENGINES.has(n) }])) as ModelRegistry;
+}
+
+/**
+ * Mark the picker's featured set. Featured models show by default in the UI
+ * before the "More models…" expansion; the rest stay one click away. Only ids
+ * that actually exist in `models` are featured; `matched`/`unmatched` let the
+ * caller detect a misconfigured override. Order/membership of `models` is
+ * untouched — only the `featured` flag is set on matches.
+ */
+function applyFeatured(
+  models: ModelInfo[],
+  featuredIds: readonly string[],
+): { models: ModelInfo[]; matched: string[]; unmatched: string[] } {
+  const known = new Set(models.map((m) => m.id));
+  const matched = featuredIds.filter((id) => known.has(id));
+  const unmatched = featuredIds.filter((id) => !known.has(id));
+  if (matched.length === 0) return { models, matched, unmatched };
+  const featured = new Set(matched);
+  return {
+    models: models.map((m) => (featured.has(m.id) ? { ...m, featured: true } : m)),
+    matched,
+    unmatched,
+  };
+}
+
+/**
+ * Resolve the featured set for the claude picker, distinguishing three cases of
+ * `engines.claude.featuredModels`:
+ *   - absent      → default to the three latest alias families.
+ *   - explicit [] → nothing featured (deliberate "long picker" opt-out).
+ *   - nonempty    → feature the matching ids; warn about typos, and if NONE match
+ *                   fall back to the default set so a stale override can't silently
+ *                   regress the picker to the full 10+ model list.
+ */
+function resolveClaudeFeatured(merged: ModelInfo[], configured: string[] | undefined): ModelInfo[] {
+  const defaults = [...CLAUDE_ALIAS_IDS];
+  if (configured === undefined) return applyFeatured(merged, defaults).models;
+  if (configured.length === 0) return merged;
+
+  const res = applyFeatured(merged, configured);
+  if (res.matched.length === 0) {
+    logger.warn(
+      `engines.claude.featuredModels matched no known models (${configured.join(", ")}); ` +
+        `falling back to the default featured set (${defaults.join(", ")}).`,
+    );
+    return applyFeatured(merged, defaults).models;
+  }
+  if (res.unmatched.length > 0) {
+    logger.warn(`engines.claude.featuredModels: ignoring unknown model id(s): ${res.unmatched.join(", ")}`);
+  }
+  return res.models;
+}
+
+/** Claude registry entry: discovered aliases/catalog > config additions > alias fallback. */
+function buildClaudeEntry(
+  config: HundredfoldConfig,
+  claudeBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  const pinned = config.engines.claude?.model;
+  const discovered = discoveredClaudeModels?.models.length ? discoveredClaudeModels : null;
+  const base = discovered ?? knownClaudeModels(pinned, discoveredClaudeEffortLevels ?? undefined);
+  const merged = mergeDiscoveredModels(base.models, claudeBlock, { configuredOverridesDiscovered: false });
+  const models = resolveClaudeFeatured(merged, config.engines.claude?.featuredModels);
+  const valid = (id?: string) => (id && models.some((m) => m.id === id) ? id : undefined);
+  const defaultModel = valid(pinned) ?? valid(claudeBlock?.default) ?? valid(base.defaultModel) ?? models[0]?.id ?? synthEntry.defaultModel;
+  return { name: "claude", available, defaultModel, effortMechanism: "claude-flag", models };
+}
+
+/** Codex registry entry: discovered catalog > config block > synthesized. */
+function buildCodexEntry(
+  config: HundredfoldConfig,
+  codexBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  if (discoveredCodexModels && discoveredCodexModels.models.length > 0) {
+    const models = mergeDiscoveredModels(discoveredCodexModels.models, codexBlock, { configuredOverridesDiscovered: true });
+    const pinned = config.engines.codex?.model;
+    const valid = (id?: string) => (id && models.some((m) => m.id === id) ? id : undefined);
+    const defaultModel = valid(pinned) ?? valid(codexBlock?.default) ?? valid(discoveredCodexModels.defaultModel) ?? models[0].id;
+    return { name: "codex", available, defaultModel, effortMechanism: "codex-config", models };
+  }
+  if (codexBlock) return fromEngineModelsConfig("codex", codexBlock, available, config.engines.codex?.model);
+  return { ...synthEntry, available };
+}
+
+/** Antigravity registry entry: discovered catalog > config block > synthesized. */
+function buildAntigravityEntry(
+  config: HundredfoldConfig,
+  antigravityBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  if (discoveredAntigravityModels && discoveredAntigravityModels.models.length > 0) {
+    const models = mergeDiscoveredModels(discoveredAntigravityModels.models, antigravityBlock, { configuredOverridesDiscovered: true });
+    const pinned = config.engines.antigravity?.model;
+    const valid = (id?: string) => (id && models.some((m) => m.id === id) ? id : undefined);
+    const defaultModel = valid(pinned) ?? valid(antigravityBlock?.default) ?? valid(discoveredAntigravityModels.defaultModel) ?? models[0].id;
+    return { name: "antigravity", available, defaultModel, effortMechanism: "none", models };
+  }
+  if (antigravityBlock) return fromEngineModelsConfig("antigravity", antigravityBlock, available, config.engines.antigravity?.model);
+  return { ...synthEntry, available };
+}
+
+/** Grok registry entry: discovered models > config `models.grok` block > known catalog. */
+function buildGrokEntry(
+  config: HundredfoldConfig,
+  grokBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  if (discoveredGrokModels && discoveredGrokModels.models.length > 0) {
+    const models = mergeDiscoveredGrokModels(discoveredGrokModels.models, grokBlock);
+    const pinned = config.engines.grok?.model;
+    const configuredDefault = grokBlock?.default;
+    const discoveredDefault = discoveredGrokModels.defaultModel;
+    const validDefault = (id: string | undefined) => id && models.some((m) => m.id === id) ? id : undefined;
+    const defaultModel =
+      validDefault(pinned) ??
+      validDefault(configuredDefault) ??
+      validDefault(discoveredDefault) ??
+      models[0].id;
+    return { name: "grok", available, defaultModel, effortMechanism: "grok-flag", models };
+  }
+  if (grokBlock) return fromEngineModelsConfig("grok", grokBlock, available, config.engines.grok?.model);
+
+  const known = knownGrokModels(config.engines.grok?.model);
+  const defaultModel = known.defaultModel || synthEntry.defaultModel;
+  return {
+    name: "grok",
+    available,
+    defaultModel,
+    effortMechanism: "grok-flag",
+    models: known.models,
+  };
+}
+
+/** Hermes registry entry: discovered models > config `models.hermes` block > known catalog. */
+function buildHermesEntry(
+  config: HundredfoldConfig,
+  hermesBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  const pinned = config.engines.hermes?.model;
+  if (discoveredHermesModels && discoveredHermesModels.models.length > 0) {
+    const models = discoveredHermesModels.models;
+    const valid = (id?: string) => (id && models.some((m) => m.id === id) ? id : undefined);
+    const defaultModel = valid(pinned) ?? valid(discoveredHermesModels.defaultModel) ?? models[0].id;
+    return { name: "hermes", available, defaultModel, effortMechanism: "none", models };
+  }
+  if (hermesBlock) return fromEngineModelsConfig("hermes", hermesBlock, available, pinned);
+  const known = knownHermesModels(pinned);
+  return { name: "hermes", available, defaultModel: known.defaultModel || synthEntry.defaultModel, effortMechanism: "none", models: known.models };
+}
+
+/** opencode registry entry: discovered models > config `models.opencode` block > synthesized. */
+function buildOpencodeEntry(
+  config: HundredfoldConfig,
+  opencodeBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  const pinned = config.engines.opencode?.model;
+  const discoveredOpencodeModels = opencodeCatalogue();
+  if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
+    // An account lists its base's models under its own provider id, so chains, pickers and validation see them as any other.
+    // Taken from the discovered catalogue, before the pinned placeholder below, so a pin on an account model keeps its entry.
+    // On a local 1.x binary, the models it cannot serve are left out: chains skip them and pickers do not offer them.
+    const accountModels = accountRegistryModels(config, discoveredOpencodeModels, { ...(opencodeLocalApi() ? { localApi: opencodeLocalApi()! } : {}), clones: opencodeClones() }).filter((m) => !discoveredOpencodeModels.some((own) => own.id === m.id));
+    let models = [...discoveredOpencodeModels, ...accountModels];
+    // A pinned model discovery has not caught up with still has to be
+    // selectable — otherwise an employee configured for it cannot start at all.
+    if (pinned && !models.some((m) => m.id === pinned)) {
+      models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
+    }
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides(models, opencodeBlock) };
+  }
+  if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
+  return { ...synthEntry, available };
+}
+
+/** Pi registry entry: discovered models > config `models.pi` block > synthesized. */
+function buildPiEntry(
+  config: HundredfoldConfig,
+  piBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  if (discoveredPiModels && discoveredPiModels.length > 0) {
+    let models = discoveredPiModels;
+    const pinned = config.engines.pi?.model;
+    if (pinned && !models.some((m) => m.id === pinned)) {
+      models = [{
+        id: pinned,
+        label: pinned,
+        supportsEffort: false,
+        effortLevels: [],
+      }, ...models];
+    }
+    const defaultModel = pinned || models[0].id;
+    return { name: "pi", available, defaultModel, effortMechanism: "pi-flag", models };
+  }
+  if (piBlock) return fromEngineModelsConfig("pi", piBlock, available, config.engines.pi?.model);
+  return { ...synthEntry, available };
+}
+
+/** Backward-compat: synthesize a minimal registry from engines.<name>.model. */
+export function synthesizeFromEngineConfig(config: HundredfoldConfig): ModelRegistry {
+  const registry: ModelRegistry = {};
+  for (const name of ENGINE_NAMES) {
+    const defaults = SYNTH_DEFAULTS[name];
+    const engineCfg = (config.engines as unknown as Record<string, { model?: string } | undefined>)[name];
+    const modelId = engineCfg?.model || defaults.fallbackModel;
+    if (name === "claude") {
+      const known = knownClaudeModels(modelId);
+      registry[name] = {
+        name,
+        available: engineAvailable(config, name),
+        defaultModel: known.defaultModel || modelId,
+        effortMechanism: EFFORT_MECHANISM[name],
+        models: known.models,
+      };
+      continue;
+    }
+    if (name === "grok") {
+      const known = knownGrokModels(modelId);
+      registry[name] = {
+        name,
+        available: engineAvailable(config, name),
+        defaultModel: known.defaultModel || modelId,
+        effortMechanism: EFFORT_MECHANISM[name],
+        models: known.models,
+      };
+      continue;
+    }
+    const model: ModelInfo = {
+      id: modelId,
+      label: modelId,
+      supportsEffort: defaults.supportsEffort,
+      effortLevels: defaults.supportsEffort ? [...defaults.effortLevels] : [],
+    };
+    registry[name] = {
+      name,
+      available: engineAvailable(config, name),
+      defaultModel: modelId,
+      effortMechanism: EFFORT_MECHANISM[name],
+      models: [model],
+    };
+  }
+  return registry;
+}
+
+export function mergeDiscoveredModels(
+  discovered: ModelInfo[],
+  block: EngineModelsConfig | undefined,
+  opts: { configuredOverridesDiscovered: boolean },
+): ModelInfo[] {
+  if (!block) return discovered;
+
+  const configured = new Map((block.models ?? []).map((m) => [m.id, m]));
+  const hidden = new Set(block.hidden ?? []);
+  const seen = new Set<string>();
+  const merged = discovered.filter((model) => !hidden.has(model.id)).map((model) => {
+    seen.add(model.id);
+    const configuredModel = configured.get(model.id);
+    if (!configuredModel) return model;
+    if (!opts.configuredOverridesDiscovered) {
+      // Discovery stays authoritative for label/effort (a stale configured label
+      // must not mask the live one). A contextWindow is different: it is purely
+      // additive when the entry has none. The offline Claude alias fallback ships
+      // without one, so without this the operator's configured window was dropped
+      // and the engine menu lost its context meter entirely whenever discovery
+      // failed. Fill the gap; never overwrite a discovered value.
+      if (typeof model.contextWindow !== "number" && typeof configuredModel.contextWindow === "number") {
+        return { ...model, contextWindow: configuredModel.contextWindow };
+      }
+      return model;
+    }
+
+    const supportsEffort = configuredModel.supportsEffort ?? model.supportsEffort;
+    return {
+      id: model.id,
+      label: configuredModel.label || model.label,
+      supportsEffort,
+      effortLevels: supportsEffort ? (configuredModel.effortLevels ?? model.effortLevels) : [],
+      ...(typeof configuredModel.contextWindow === "number"
+        ? { contextWindow: configuredModel.contextWindow }
+        : typeof model.contextWindow === "number"
+          ? { contextWindow: model.contextWindow }
+          : {}),
+    };
+  });
+
+  for (const configuredModel of block.models ?? []) {
+    if (hidden.has(configuredModel.id)) continue;
+    if (!seen.has(configuredModel.id)) merged.push(modelInfoFromConfigEntry(configuredModel));
+  }
+  return merged;
+}
+
+function modelInfoFromConfigEntry(m: EngineModelsConfig["models"][number]): ModelInfo {
+  const supportsEffort = m.supportsEffort ?? false;
+  return {
+    id: m.id,
+    label: m.label || m.id,
+    supportsEffort,
+    effortLevels: supportsEffort ? (m.effortLevels ?? []) : [],
+    ...(typeof m.contextWindow === "number" ? { contextWindow: m.contextWindow } : {}),
+  };
+}
+
+function fromEngineModelsConfig(
+  name: EngineName,
+  block: EngineModelsConfig,
+  available: boolean,
+  pinnedModel?: string,
+): EngineRegistryEntry {
+  const hidden = new Set(block.hidden ?? []);
+  const models: ModelInfo[] = (block.models ?? []).filter((m) => !hidden.has(m.id)).map((m) => {
+    return modelInfoFromConfigEntry(m);
+  });
+  const validDefault = (id: string | undefined) => id && models.some((m) => m.id === id) ? id : undefined;
+  const defaultModel = validDefault(pinnedModel) ?? validDefault(block.default) ?? models[0]?.id ?? SYNTH_DEFAULTS[name].fallbackModel;
+  return {
+    name,
+    available,
+    defaultModel,
+    effortMechanism: block.effortMechanism ?? EFFORT_MECHANISM[name],
+    models,
+  };
+}
+
+function mergeDiscoveredGrokModels(discovered: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
+  if (!block) return discovered;
+
+  const configured = new Map((block.models ?? []).map((m) => [m.id, m]));
+  const hidden = new Set(block.hidden ?? []);
+  const seen = new Set<string>();
+  const merged = discovered.filter((model) => !hidden.has(model.id)).map((model) => {
+    seen.add(model.id);
+    const configuredModel = configured.get(model.id);
+    if (!configuredModel) return model;
+
+    const supportsEffort = configuredModel.supportsEffort ?? model.supportsEffort;
+    return {
+      id: model.id,
+      label: configuredModel.label || model.label,
+      supportsEffort,
+      effortLevels: supportsEffort ? (configuredModel.effortLevels ?? model.effortLevels) : [],
+      ...(typeof configuredModel.contextWindow === "number"
+        ? { contextWindow: configuredModel.contextWindow }
+        : typeof model.contextWindow === "number"
+          ? { contextWindow: model.contextWindow }
+          : {}),
+    };
+  });
+
+  for (const configuredModel of block.models ?? []) {
+    if (hidden.has(configuredModel.id)) continue;
+    if (!seen.has(configuredModel.id)) merged.push(modelInfoFromConfigEntry(configuredModel));
+  }
+
+  return merged;
+}

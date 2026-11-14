@@ -1,4 +1,4 @@
-const RECENT_KEY = "jinn-command-recent"
+const RECENT_KEY = "hundredfold-command-recent"
 const MAX_RECENT = 5
 
 export interface RecentItem {

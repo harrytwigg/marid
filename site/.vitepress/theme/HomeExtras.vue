@@ -36,10 +36,11 @@ const shots = [
     </section>
 
     <section class="hf-section hf-credit" aria-labelledby="hf-credit">
-      <h2 id="hf-credit">Built on Jinn</h2>
+      <h2 id="hf-credit">Credit</h2>
       <p>
-        Hundredfold is built on <a href="https://github.com/hristo2612/jinn">Jinn</a> by hristo2612 and
-        contributors (MIT). Most of the code is theirs. See <a :href="withBase('/marid-vs-jinn')">how the two compare</a>.
+        Hundredfold is a fork of an MIT-licensed project, and most of the code is its authors'. See
+        <a href="https://github.com/hundredfoldhq/hundredfold/blob/main/NOTICE">NOTICE</a> for the credit and
+        <a :href="withBase('/hundredfold-vs-upstream')">how the two compare</a>.
       </p>
       <p class="hf-links">
         <a href="https://github.com/hundredfoldhq/hundredfold">GitHub</a>

@@ -50,7 +50,7 @@ function useSignIn(onSignIn: (email: string, password: string) => Promise<void>)
 
 export function SignInForm({ onSignIn }: { onSignIn: (email: string, password: string) => Promise<void> }) {
   const form = useSignIn(onSignIn)
-  const shared = { disabled: form.busy, invalid: Boolean(form.message), errorId: "jinn-signin-error" }
+  const shared = { disabled: form.busy, invalid: Boolean(form.message), errorId: "hundredfold-signin-error" }
   return (
     <form
       onSubmit={form.submit}
@@ -59,7 +59,7 @@ export function SignInForm({ onSignIn }: { onSignIn: (email: string, password: s
     >
       <AccountField
         {...shared}
-        id="jinn-signin-email"
+        id="hundredfold-signin-email"
         label="Email"
         icon={<Mail size={16} className="shrink-0 text-[var(--text-tertiary)]" />}
         type="email"
@@ -72,7 +72,7 @@ export function SignInForm({ onSignIn }: { onSignIn: (email: string, password: s
       />
       <AccountField
         {...shared}
-        id="jinn-signin-password"
+        id="hundredfold-signin-password"
         label="Password"
         icon={<KeyRound size={16} className="shrink-0 text-[var(--text-tertiary)]" />}
         type="password"
@@ -82,7 +82,7 @@ export function SignInForm({ onSignIn }: { onSignIn: (email: string, password: s
         onChange={(e) => form.setPassword(e.target.value)}
       />
 
-      {form.message && <ErrorBanner id="jinn-signin-error">{form.message}</ErrorBanner>}
+      {form.message && <ErrorBanner id="hundredfold-signin-error">{form.message}</ErrorBanner>}
 
       <button type="submit" disabled={!form.ready} aria-label={form.busy ? "Signing in" : "Sign in"} className={submitClass}>
         <AuthStateIcon busy={form.busy} idleIcon={KeyRound} size={16} />

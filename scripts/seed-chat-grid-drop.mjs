@@ -5,8 +5,8 @@ import { createRequire } from 'node:module'
 const [sandboxHome, repo] = process.argv.slice(2)
 if (!sandboxHome || !repo) throw new Error('usage: seed-chat-grid-drop.mjs <sandbox-home> <repo>')
 
-const requireFromJinn = createRequire(path.join(repo, 'packages/jinn/package.json'))
-const Database = requireFromJinn('better-sqlite3')
+const requireFromHundredfold = createRequire(path.join(repo, 'packages/hundredfold/package.json'))
+const Database = requireFromHundredfold('better-sqlite3')
 const db = new Database(path.join(sandboxHome, 'sessions', 'registry.db'))
 const now = new Date().toISOString()
 // The sandbox's own --seed leaves three sessions (#1-#3). The drop matrix drives every pane

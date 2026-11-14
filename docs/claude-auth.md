@@ -31,9 +31,9 @@ Two consequences shape everything below:
 
 ## What the gateway does
 
-`packages/jinn/src/sessions/claude-auth-watch.ts` (side effects) over
-`packages/jinn/src/shared/claude-auth.ts` (reads the file) and
-`claude-auth-outage.ts` (the ledger, at `$JINN_HOME/tmp/claude-auth-outage.json`).
+`packages/hundredfold/src/sessions/claude-auth-watch.ts` (side effects) over
+`packages/hundredfold/src/shared/claude-auth.ts` (reads the file) and
+`claude-auth-outage.ts` (the ledger, at `$HUNDREDFOLD_HOME/tmp/claude-auth-outage.json`).
 
 1. **Observe.** Every Claude turn reports how it ended. `authentication_failed`
    or `oauth_org_not_allowed` opens an outage for the session's *scope* — the
@@ -44,7 +44,7 @@ Two consequences shape everything below:
    naming the host, the reason, what it costs (every Claude turn and cron job
    there), and the fix. The outage then counts; it does not re-send. Recovery
    sends one message with the duration and the tally. An outage survives
-   `jinn restart` without re-alerting.
+   `hundredfold restart` without re-alerting.
 3. **Refuse doomed launches.** Turn preflight refuses a *local* Claude launch
    when the disk states outright that it cannot work (no credentials file;
    refresh token past its own expiry) or when a launch already proved it and

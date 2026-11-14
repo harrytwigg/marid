@@ -1,4 +1,4 @@
-# Contributing to Jinn
+# Contributing to Hundredfold
 
 Thanks for your interest in contributing. This guide covers the basics.
 
@@ -21,7 +21,7 @@ reach for, what makes a test worth keeping, and what a plan has to show.
    ```bash
    pnpm install
    ```
-3. Initialize Jinn (one-time - builds all packages and creates the instance home at `~/.jinn`):
+3. Initialize Hundredfold (one-time - builds all packages and creates the instance home at `~/.hundredfold`):
    ```bash
    pnpm setup
    ```
@@ -50,10 +50,10 @@ reach for, what makes a test worth keeping, and what a plan has to show.
   `pnpm test` also runs on Windows in CI; if you touch filesystem paths or process spawning,
   expect that leg to have an opinion.
   Locally `pnpm test` runs at the lowest scheduling priority available (`nice 19` and, on Linux,
-  the `ionice` idle class), so it yields to whatever else you are doing; set `JINN_TEST_NICE=0`
+  the `ionice` idle class), so it yields to whatever else you are doing; set `HUNDREDFOLD_TEST_NICE=0`
   for a normal-priority run. Each vitest suite leases up to eight workers from a core pool shared
-  by every run on the machine (cores minus 12, never fewer than 8; `JINN_TEST_GLOBAL_CORES`,
-  `JINN_TEST_RUN_CORES` and `JINN_TEST_RESERVED_CORES` tune it, `JINN_TEST_GLOBAL_CORES=0`
+  by every run on the machine (cores minus 12, never fewer than 8; `HUNDREDFOLD_TEST_GLOBAL_CORES`,
+  `HUNDREDFOLD_TEST_RUN_CORES` and `HUNDREDFOLD_TEST_RESERVED_CORES` tune it, `HUNDREDFOLD_TEST_GLOBAL_CORES=0`
   turns it off) and waits when the pool is empty. CI is unaffected — turbo is serial and vitest
   is capped at two workers there.
 - Branch protection on `main` requires exactly one status check: `all-checks-pass`. It needs
@@ -75,8 +75,8 @@ reach for, what makes a test worth keeping, and what a plan has to show.
 
 CI runs `scripts/check-footguns.mjs` over the lines your change **adds**. It
 covers six things this project has actually shipped by accident: an absolute
-`/Users/` path, a `.jinn` home built from `os.homedir()` instead of
-`resolveJinnHome()`, an email on a real domain, a literal `7777`/`7788` port, a
+`/Users/` path, a `.hundredfold` home built from `os.homedir()` instead of
+`resolveHundredfoldHome()`, an email on a real domain, a literal `7777`/`7788` port, a
 `process.env` read outside the config layer, and a `child_process` spawn with no
 explicit `stdio`. Each finding prints the fix.
 
@@ -97,7 +97,7 @@ would itself be the leak, so personal terms are read at run time from
 
 ## Project Layout
 
-- `packages/jinn` -- Core gateway daemon and CLI (package dir).
+- `packages/hundredfold` -- Core gateway daemon and CLI (package dir).
 - `packages/web` -- Web dashboard frontend.
 - `packages/gateway-events` -- Shared event contract between the gateway and the dashboard.
 

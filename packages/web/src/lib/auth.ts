@@ -7,7 +7,7 @@ export interface AuthState {
   authenticated: boolean
   canBootstrapLocal: boolean
   networkExposed: boolean
-  /** Instance name serving this page, so pairing hints can name `jinn -i <instance> pair`. */
+  /** Instance name serving this page, so pairing hints can name `hundredfold -i <instance> pair`. */
   instance?: string
   /** Gateway auth is on, so accounts can exist. Absent from an older gateway. */
   accountsEnabled?: boolean

@@ -42,8 +42,8 @@ describe('--danger-fill', () => {
 
 describe('enter motion', () => {
   it.each([
-    ['.user-msg-bubble[data-msg-enter]', 'jinn-msg-send-in', '--duration-base'],
-    ['.assistant-transcript[data-msg-enter]', 'jinn-msg-receive-in', '--duration-slow'],
+    ['.user-msg-bubble[data-msg-enter]', 'hundredfold-msg-send-in', '--duration-base'],
+    ['.assistant-transcript[data-msg-enter]', 'hundredfold-msg-receive-in', '--duration-slow'],
   ])('%s animates with a duration token, never a literal', (selector, keyframes, duration) => {
     const rule = block(selector)
     expect(rule).toContain(`animation: ${keyframes} var(${duration}) var(--ease-smooth) backwards`)
@@ -61,14 +61,14 @@ describe('enter motion', () => {
 
   it('enters the conversation title with a duration token and no literal', () => {
     const rule = block('[data-title-enter] {')
-    expect(rule).toContain('animation: jinn-title-enter var(--duration-base) var(--ease-smooth)')
+    expect(rule).toContain('animation: hundredfold-title-enter var(--duration-base) var(--ease-smooth)')
     expect(rule).not.toMatch(/\d+m?s/)
   })
 
   it('enters the title on opacity and transform alone', () => {
     // The mobile title sits in a fixed-height nav bar between the back control
     // and the compose button. Anything that changed its box would move both.
-    const keyframes = block('@keyframes jinn-title-enter')
+    const keyframes = block('@keyframes hundredfold-title-enter')
     expect(keyframes).not.toContain('filter')
     expect(keyframes).not.toMatch(/\b(width|height|top|left|right|bottom|margin|padding|font|inset|scale)\s*:/)
   })
@@ -81,7 +81,7 @@ describe('enter motion', () => {
 
   it('animates an arriving tool call with a duration token and no literal', () => {
     const rule = block('.tool-arrive {')
-    expect(rule).toContain('animation: jinn-tool-rise var(--duration-base) var(--ease-smooth) backwards')
+    expect(rule).toContain('animation: hundredfold-tool-rise var(--duration-base) var(--ease-smooth) backwards')
     // The `--arrive-delay` fallback is a stagger, not a duration, and matches
     // what every other arrival rule in this file already writes.
     expect(rule).not.toMatch(/animation:[^;]*\d+m?s/)
@@ -91,7 +91,7 @@ describe('enter motion', () => {
     // `filter` is not a compositor property: blurring a pill that sits in the
     // transcript repaints it every frame, which is the one thing the motion rule
     // rules out. The dispatch keyframe blurs; this one is that keyframe without it.
-    expect(block('@keyframes jinn-tool-rise')).not.toContain('filter')
+    expect(block('@keyframes hundredfold-tool-rise')).not.toContain('filter')
   })
 
   it('switches the tool-call entrance off under reduced motion', () => {

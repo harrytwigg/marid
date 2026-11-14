@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ResolvedFallbackLink } from '@jinn/fallback-chain-wire'
+import type { ResolvedFallbackLink } from '@hundredfold/fallback-chain-wire'
 import {
   blankLink,
   hasLegacyEntries,

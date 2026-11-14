@@ -28,6 +28,6 @@ test('a stale route asset reloads once and opens the fresh route', async ({ brow
   await page.getByRole('link', { name: 'More', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'More', exact: true })).toBeVisible()
   expect(failed).toBe(true)
-  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('jinn:chunk-retry:')))).toEqual([])
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('hundredfold:chunk-retry:')))).toEqual([])
   await context.close()
 })

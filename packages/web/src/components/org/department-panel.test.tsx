@@ -61,10 +61,10 @@ describe("DepartmentPanel", () => {
     expect(screen.queryByTestId("department-definition-error")).toBeNull()
   })
 
-  it("says jinn is the only MCP server when the department lists none", async () => {
+  it("says hundredfold is the only MCP server when the department lists none", async () => {
     mount({ mcp: [] })
     await screen.findByTestId("department-panel")
-    expect(text("department-mcp")).toBe("MCP serversNone. Scoped sessions get only the jinn server.")
+    expect(text("department-mcp")).toBe("MCP serversNone. Scoped sessions get only the hundredfold server.")
   })
 
   it("warns, under the MCP servers, of a name this instance configures no server for", async () => {

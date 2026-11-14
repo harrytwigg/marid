@@ -1,4 +1,4 @@
-import type { FallbackChainEntry } from "@jinn/fallback-chain-wire"
+import type { FallbackChainEntry } from "@hundredfold/fallback-chain-wire"
 import type { EngineHealth } from "@/lib/api"
 import { linksOfEntries } from "./chain-links"
 
@@ -14,7 +14,7 @@ export interface EngineSettings {
   /** `<model this engine serves>: <model the stand-in serves>`, applied when a
    *  turn falls through the chain. Edited on the card by model-map-editor.tsx,
    *  and by hand in config.yaml; the two agree because both refuse an entry in
-   *  the same words, off `@jinn/fallback-map-wire`. */
+   *  the same words, off `@hundredfold/fallback-map-wire`. */
   fallbackModelMap?: Record<string, string>
 }
 

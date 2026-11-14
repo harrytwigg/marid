@@ -15,7 +15,7 @@ import { spawn } from "node:child_process"
  */
 export async function withLabHomeFixture({ layout, source }, body) {
   const child = spawn(process.execPath, ["-e", source], {
-    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: layout.osHome, JINN_HOME: layout.home },
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: layout.osHome, HUNDREDFOLD_HOME: layout.home },
     stdio: ["ignore", "ignore", "inherit", "ipc"],
   })
   try {

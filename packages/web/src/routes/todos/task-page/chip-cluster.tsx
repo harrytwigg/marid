@@ -28,7 +28,7 @@ function ElapsedChip({ working, waiting }: { working: string; waiting: boolean }
         className={
           waiting
             ? "size-1.5 rounded-full"
-            : "size-1.5 rounded-full bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]"
+            : "size-1.5 rounded-full bg-[var(--system-blue)] motion-safe:animate-[hundredfold-pulse_1.4s_ease-in-out_infinite]"
         }
         style={waiting ? { background: SESSION_WAITING_COLOR } : undefined}
         aria-hidden

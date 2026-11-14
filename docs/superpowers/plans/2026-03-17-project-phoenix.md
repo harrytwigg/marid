@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Modernize the Jinn web dashboard with shadcn/ui, TanStack Query, chat multitasking (tabs + split view), command palette, goal hierarchy, working cost tracking, and CI pipeline.
+**Goal:** Modernize the Hundredfold web dashboard with shadcn/ui, TanStack Query, chat multitasking (tabs + split view), command palette, goal hierarchy, working cost tracking, and CI pipeline.
 
 **Architecture:** 5 sequential phases where each produces a shippable state. Phase 1 (foundation) enables all others. Phases 2 and 3 can be parallelized after Phase 1. Frontend is Next.js 15 static export with React 19. Backend is Node.js gateway with SQLite. All new features are client-side only (no SSR).
 
@@ -43,9 +43,9 @@
 ### Phase 4 - New files
 | File | Responsibility |
 |------|---------------|
-| `packages/jinn/src/gateway/costs.ts` | Cost aggregation API routes |
-| `packages/jinn/src/gateway/budgets.ts` | Budget CRUD + enforcement API routes |
-| `packages/jinn/src/gateway/goals.ts` | Goals CRUD API routes |
+| `packages/hundredfold/src/gateway/costs.ts` | Cost aggregation API routes |
+| `packages/hundredfold/src/gateway/budgets.ts` | Budget CRUD + enforcement API routes |
+| `packages/hundredfold/src/gateway/goals.ts` | Goals CRUD API routes |
 | `packages/web/src/hooks/use-costs.ts` | React Query hooks for costs/budgets API |
 | `packages/web/src/hooks/use-goals.ts` | React Query hooks for goals API |
 | `packages/web/src/app/goals/page.tsx` | Goals tree page |
@@ -53,9 +53,9 @@
 ### Phase 5 - New files
 | File | Responsibility |
 |------|---------------|
-| `packages/jinn/vitest.config.ts` | Backend vitest config (ESM, in-memory SQLite) |
+| `packages/hundredfold/vitest.config.ts` | Backend vitest config (ESM, in-memory SQLite) |
 | `packages/web/vitest.config.ts` | Frontend vitest config (jsdom, React testing library) |
-| `packages/jinn/src/engines/mock.ts` | Mock engine for E2E (canned responses + streaming sim) |
+| `packages/hundredfold/src/engines/mock.ts` | Mock engine for E2E (canned responses + streaming sim) |
 | `playwright.config.ts` | Playwright config (base URL, global setup) |
 | `e2e/global-setup.ts` | Start test gateway with mock engine |
 | `e2e/smoke.spec.ts` | Dashboard loads, nav links, no console errors |
@@ -87,7 +87,7 @@
 - [ ] **Step 1: Install shadcn components via CLI**
 
 ```bash
-cd ~/Projects/jinn/packages/web
+cd ~/Projects/hundredfold/packages/web
 npx shadcn@latest add dropdown-menu popover select input textarea sheet context-menu toggle toggle-group alert alert-dialog command breadcrumb
 ```
 
@@ -104,7 +104,7 @@ Expected: All 9 existing components + 14 new ones listed.
 - [ ] **Step 3: Verify build passes**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Expected: Clean build. If shadcn generates Tailwind v3 syntax (e.g., `dark:` classes without the custom variant), we'll fix in Task 2.
@@ -112,7 +112,7 @@ Expected: Clean build. If shadcn generates Tailwind v3 syntax (e.g., `dark:` cla
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 git add packages/web/src/components/ui/ packages/web/package.json pnpm-lock.yaml
 git commit -m "feat(web): install missing shadcn/ui components (dropdown, popover, select, input, sheet, command, etc.)"
 ```
@@ -141,14 +141,14 @@ This tells Tailwind v4 that `dark:` classes should apply when any of the three d
 - [ ] **Step 2: Verify shadcn components render in all themes**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Expected: Clean build. The `dark:` prefixed classes in shadcn components will now correctly activate for dark/glass/color themes.
 
 - [ ] **Step 3: Manual verification**
 
-Start the gateway (`jinn start`), open the dashboard, switch between all 5 themes (dark, glass, color, light, system). Verify that shadcn components (buttons, cards, dialogs) look correct in each theme. Pay special attention to:
+Start the gateway (`hundredfold start`), open the dashboard, switch between all 5 themes (dark, glass, color, light, system). Verify that shadcn components (buttons, cards, dialogs) look correct in each theme. Pay special attention to:
 - Button backgrounds (should be visible in light theme)
 - Card borders (should be visible in dark theme)
 - Dialog overlay opacity
@@ -156,7 +156,7 @@ Start the gateway (`jinn start`), open the dashboard, switch between all 5 theme
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 git add packages/web/src/app/globals.css
 git commit -m "fix(web): reconcile shadcn dark: variant with data-theme attribute system"
 ```
@@ -173,7 +173,7 @@ git commit -m "fix(web): reconcile shadcn dark: variant with data-theme attribut
 - [ ] **Step 1: Install @tanstack/react-query**
 
 ```bash
-cd ~/Projects/jinn/packages/web
+cd ~/Projects/hundredfold/packages/web
 pnpm add @tanstack/react-query@^5
 ```
 
@@ -222,7 +222,7 @@ Wrap the outermost provider:
 - [ ] **Step 4: Verify build**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Expected: Clean build. React Query is now available to all components via the provider.
@@ -230,7 +230,7 @@ Expected: Clean build. React Query is now available to all components via the pr
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 git add packages/web/src/lib/query-client.ts packages/web/src/app/client-providers.tsx packages/web/package.json pnpm-lock.yaml
 git commit -m "feat(web): add TanStack React Query v5 with QueryClientProvider"
 ```
@@ -290,13 +290,13 @@ export const queryKeys = {
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd ~/Projects/jinn && pnpm typecheck
+cd ~/Projects/hundredfold && pnpm typecheck
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 git add packages/web/src/lib/query-keys.ts
 git commit -m "feat(web): add React Query key factory for all API resources"
 ```
@@ -537,7 +537,7 @@ export function useStatus() {
 - [ ] **Step 6: Verify TypeScript compiles**
 
 ```bash
-cd ~/Projects/jinn && pnpm typecheck
+cd ~/Projects/hundredfold && pnpm typecheck
 ```
 
 Expected: PASS. All hooks reference existing API functions from `lib/api.ts`.
@@ -545,7 +545,7 @@ Expected: PASS. All hooks reference existing API functions from `lib/api.ts`.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 git add packages/web/src/hooks/use-sessions.ts packages/web/src/hooks/use-employees.ts packages/web/src/hooks/use-cron.ts packages/web/src/hooks/use-skills.ts packages/web/src/hooks/use-config.ts
 git commit -m "feat(web): add React Query hooks for sessions, org, cron, skills, config"
 ```
@@ -673,13 +673,13 @@ Add `<QueryInvalidationBridge />` inside `QueryClientProvider` in `client-provid
 - [ ] **Step 3: Verify build**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 git add packages/web/src/hooks/use-query-invalidation.ts packages/web/src/app/client-providers.tsx
 git commit -m "feat(web): add WS → React Query invalidation bridge with 500ms debounce"
 ```
@@ -741,7 +741,7 @@ All dropdown menus from toolbar buttons should use the same z-index (e.g., `z-50
 - [ ] **Step 6: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Manual: Open dashboard, navigate to chat. Verify bell + more menu don't overlap. Check mobile layout.
@@ -764,7 +764,7 @@ git commit -m "fix(web): move notification bell into header flow, fix toolbar z-
 
 Replace the current grouping logic (which only shows one entry per employee with no expand capability) with an expandable group model:
 
-- Each employee group stores: `expanded: boolean` (in localStorage via `jinn-sidebar-expanded` key)
+- Each employee group stores: `expanded: boolean` (in localStorage via `hundredfold-sidebar-expanded` key)
 - Collapsed: shows employee name, dept, session count badge, status dot, last message timestamp
 - Expanded: shows up to 5 latest sessions inline with status dot + title + timestamp + 1-line message preview
 - Add "Show all" link when employee has > 5 sessions
@@ -781,7 +781,7 @@ The session list data comes from the existing `useSessions()` hook (or the curre
 
 - [ ] **Step 3: Add pinned section at top**
 
-Sessions can be pinned (already in localStorage as `jinn-pinned-sessions`). Render pinned sessions at the top of the sidebar in their own section:
+Sessions can be pinned (already in localStorage as `hundredfold-pinned-sessions`). Render pinned sessions at the top of the sidebar in their own section:
 
 ```
 📌 Pinned
@@ -791,7 +791,7 @@ Sessions can be pinned (already in localStorage as `jinn-pinned-sessions`). Rend
 
 - [ ] **Step 4: Add unread count badges**
 
-Employee groups show an unread count badge (accent color pill) when they have sessions with unread messages. A session is "unread" if its ID is not in `jinn-read-sessions` localStorage.
+Employee groups show an unread count badge (accent color pill) when they have sessions with unread messages. A session is "unread" if its ID is not in `hundredfold-read-sessions` localStorage.
 
 - [ ] **Step 5: Add context menu (right-click)**
 
@@ -804,7 +804,7 @@ Use the shadcn `ContextMenu` component (installed in Task 1). On right-click of 
 - [ ] **Step 6: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Manual: Open chat, verify employee groups expand/collapse, session previews show, pins work, context menu appears on right-click.
@@ -842,8 +842,8 @@ export interface ChatTab {
   unread: boolean
 }
 
-const STORAGE_KEY = 'jinn-chat-tabs'
-const DRAFT_PREFIX = 'jinn-chat-draft-'
+const STORAGE_KEY = 'hundredfold-chat-tabs'
+const DRAFT_PREFIX = 'hundredfold-chat-draft-'
 const MAX_TABS = 12
 
 function loadTabs(): { tabs: ChatTab[]; activeIndex: number } {
@@ -1069,7 +1069,7 @@ In `packages/web/src/app/chat/page.tsx`:
 - [ ] **Step 5: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Manual: Open chat, click multiple employees → tabs appear, switch between tabs, close tabs, keyboard shortcuts work, drafts persist.
@@ -1141,7 +1141,7 @@ After extraction, `page.tsx` becomes:
 - [ ] **Step 4: Verify build + test that existing chat still works**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Manual: Open chat, send message, verify streaming works, verify all existing functionality intact.
@@ -1259,7 +1259,7 @@ In the split toggle button, add `className="hidden lg:flex ..."`. On screens < l
 - [ ] **Step 6: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Manual: Toggle split mode, verify 2-pane and 3-pane layouts, verify each pane independently streams, verify pane focus indicator.
@@ -1314,7 +1314,7 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (items.length > 0) {
       const trail = items.map(i => i.label).join(' > ')
-      document.title = `${trail} - Jinn`
+      document.title = `${trail} - Hundredfold`
     }
   }, [items])
 
@@ -1410,7 +1410,7 @@ Each page adds `useBreadcrumbs()` on mount. Examples:
 - [ ] **Step 6: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 7: Commit**
@@ -1453,7 +1453,7 @@ Static actions:
 
 - [ ] **Step 3: Add Recent items**
 
-Track last 5 used command palette items in `localStorage` key `jinn-command-recent`. On each item selection, push to recents list (dedup by id, max 5). Show as first group when search is empty.
+Track last 5 used command palette items in `localStorage` key `hundredfold-command-recent`. On each item selection, push to recents list (dedup by id, max 5). Show as first group when search is empty.
 
 - [ ] **Step 4: Add Sessions search**
 
@@ -1466,7 +1466,7 @@ Show installed skills (from `useSkills()`). On select, if on chat page, insert t
 - [ ] **Step 6: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 Manual: Press Cmd+K, verify search works, navigate to pages, create new chat from palette, verify recent items persist.
@@ -1485,14 +1485,14 @@ git commit -m "feat(web): replace GlobalSearch with cmdk command palette - actio
 ### Task 14: Goals - backend SQLite table + API routes
 
 **Files:**
-- Create: `packages/jinn/src/gateway/goals.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
+- Create: `packages/hundredfold/src/gateway/goals.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
 
 - [ ] **Step 1: Add Goal type to types.ts**
 
-In `packages/jinn/src/shared/types.ts`:
+In `packages/hundredfold/src/shared/types.ts`:
 
 ```typescript
 export interface Goal {
@@ -1512,7 +1512,7 @@ export interface Goal {
 
 - [ ] **Step 2: Add goals table migration to registry.ts**
 
-In `packages/jinn/src/sessions/registry.ts`, add to the `initDb()` function (after sessions/messages/queue_items tables):
+In `packages/hundredfold/src/sessions/registry.ts`, add to the `initDb()` function (after sessions/messages/queue_items tables):
 
 ```typescript
 db.exec(`
@@ -1535,7 +1535,7 @@ db.exec(`
 
 - [ ] **Step 3: Create goals.ts with CRUD functions**
 
-Create `packages/jinn/src/gateway/goals.ts` with:
+Create `packages/hundredfold/src/gateway/goals.ts` with:
 - `listGoals(db, filters?)` → `Goal[]`
 - `getGoalTree(db)` → nested `Goal[]` (recursive parent→children)
 - `getGoal(db, id)` → `Goal | null`
@@ -1546,7 +1546,7 @@ Create `packages/jinn/src/gateway/goals.ts` with:
 
 - [ ] **Step 4: Register API routes in api.ts**
 
-Add to `packages/jinn/src/gateway/api.ts`:
+Add to `packages/hundredfold/src/gateway/api.ts`:
 - `GET /api/goals` → `listGoals()`
 - `GET /api/goals/tree` → `getGoalTree()`
 - `GET /api/goals/:id` → `getGoal()`
@@ -1560,13 +1560,13 @@ Follow the existing `matchRoute()` pattern.
 - [ ] **Step 5: Verify build**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/goals.ts packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/registry.ts packages/jinn/src/shared/types.ts
+git add packages/hundredfold/src/gateway/goals.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/shared/types.ts
 git commit -m "feat(api): goals hierarchy - SQLite table, CRUD API routes, tree structure"
 ```
 
@@ -1611,7 +1611,7 @@ Add a "Goals" nav item with the `Target` icon from lucide-react, linking to `/go
 - [ ] **Step 5: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 6: Commit**
@@ -1626,12 +1626,12 @@ git commit -m "feat(web): goals page with tree view, inline detail panel, CRUD o
 ### Task 16: Cost aggregation API (backend)
 
 **Files:**
-- Create: `packages/jinn/src/gateway/costs.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/gateway/costs.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 
 - [ ] **Step 1: Create costs.ts with aggregation queries**
 
-Create `packages/jinn/src/gateway/costs.ts`:
+Create `packages/hundredfold/src/gateway/costs.ts`:
 
 ```typescript
 import { initDb } from '../sessions/registry.js';
@@ -1697,20 +1697,20 @@ export function getCostsByEmployee(period: 'month' | 'week' = 'month') {
 
 - [ ] **Step 2: Register cost routes in api.ts**
 
-Add to `packages/jinn/src/gateway/api.ts`:
+Add to `packages/hundredfold/src/gateway/api.ts`:
 - `GET /api/costs/summary?period=day|week|month` → `getCostSummary(period)`
 - `GET /api/costs/by-employee?period=month|week` → `getCostsByEmployee(period)`
 
 - [ ] **Step 3: Verify build**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/costs.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/costs.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(api): cost aggregation API - summary by period, breakdown by employee"
 ```
 
@@ -1719,10 +1719,10 @@ git commit -m "feat(api): cost aggregation API - summary by period, breakdown by
 ### Task 17: Budget system (backend)
 
 **Files:**
-- Create: `packages/jinn/src/gateway/budgets.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
+- Create: `packages/hundredfold/src/gateway/budgets.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
 
 - [ ] **Step 1: Add budget_events table to registry.ts**
 
@@ -1751,7 +1751,7 @@ Functions:
 
 - [ ] **Step 3: Add budget enforcement to SessionManager.route()**
 
-In `packages/jinn/src/sessions/manager.ts`, in the `runSession()` method, BEFORE calling `engine.run()`:
+In `packages/hundredfold/src/sessions/manager.ts`, in the `runSession()` method, BEFORE calling `engine.run()`:
 
 ```typescript
 // Budget check
@@ -1779,13 +1779,13 @@ if (session.employee && config.budgets?.employees?.[session.employee]) {
 - [ ] **Step 5: Verify build**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/budgets.ts packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/registry.ts packages/jinn/src/sessions/manager.ts
+git add packages/hundredfold/src/gateway/budgets.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/sessions/manager.ts
 git commit -m "feat(api): budget system - config-driven limits, enforcement before engine.run(), override support"
 ```
 
@@ -1825,7 +1825,7 @@ Replace the current costs page content with:
 - [ ] **Step 4: Verify build + manual test**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 5: Commit**
@@ -1842,20 +1842,20 @@ git commit -m "feat(web): working costs page with real data, budget progress bar
 ### Task 19: Vitest backend setup + first tests
 
 **Files:**
-- Create: `packages/jinn/vitest.config.ts`
-- Modify: `packages/jinn/package.json`
-- Create: `packages/jinn/src/gateway/__tests__/costs.test.ts`
+- Create: `packages/hundredfold/vitest.config.ts`
+- Modify: `packages/hundredfold/package.json`
+- Create: `packages/hundredfold/src/gateway/__tests__/costs.test.ts`
 
 - [ ] **Step 1: Install vitest**
 
 ```bash
-cd ~/Projects/jinn/packages/jinn
+cd ~/Projects/hundredfold/packages/hundredfold
 pnpm add -D vitest
 ```
 
 - [ ] **Step 2: Create vitest config**
 
-Create `packages/jinn/vitest.config.ts`:
+Create `packages/hundredfold/vitest.config.ts`:
 
 ```typescript
 import { defineConfig } from 'vitest/config'
@@ -1871,7 +1871,7 @@ export default defineConfig({
 
 - [ ] **Step 3: Add test script to package.json**
 
-In `packages/jinn/package.json`, add to scripts:
+In `packages/hundredfold/package.json`, add to scripts:
 ```json
 "test": "vitest run",
 "test:watch": "vitest"
@@ -1879,7 +1879,7 @@ In `packages/jinn/package.json`, add to scripts:
 
 - [ ] **Step 4: Write first test - cost aggregation**
 
-Create `packages/jinn/src/gateway/__tests__/costs.test.ts`:
+Create `packages/hundredfold/src/gateway/__tests__/costs.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -1904,7 +1904,7 @@ describe('getCostSummary', () => {
 - [ ] **Step 5: Run tests**
 
 ```bash
-cd ~/Projects/jinn/packages/jinn && pnpm test
+cd ~/Projects/hundredfold/packages/hundredfold && pnpm test
 ```
 
 Expected: All tests pass.
@@ -1912,7 +1912,7 @@ Expected: All tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/vitest.config.ts packages/jinn/package.json packages/jinn/src/gateway/__tests__/
+git add packages/hundredfold/vitest.config.ts packages/hundredfold/package.json packages/hundredfold/src/gateway/__tests__/
 git commit -m "test(api): vitest setup + cost aggregation unit tests"
 ```
 
@@ -1928,7 +1928,7 @@ git commit -m "test(api): vitest setup + cost aggregation unit tests"
 - [ ] **Step 1: Install vitest + testing library**
 
 ```bash
-cd ~/Projects/jinn/packages/web
+cd ~/Projects/hundredfold/packages/web
 pnpm add -D vitest @testing-library/react @testing-library/user-event jsdom
 ```
 
@@ -2009,7 +2009,7 @@ describe('useChatTabs', () => {
 - [ ] **Step 5: Run tests**
 
 ```bash
-cd ~/Projects/jinn/packages/web && pnpm test
+cd ~/Projects/hundredfold/packages/web && pnpm test
 ```
 
 Expected: All tests pass.
@@ -2048,12 +2048,12 @@ Change the root `test` script to:
 "test": "turbo run test"
 ```
 
-This runs tests in both packages/jinn and packages/web.
+This runs tests in both packages/hundredfold and packages/web.
 
 - [ ] **Step 3: Verify**
 
 ```bash
-cd ~/Projects/jinn && pnpm test
+cd ~/Projects/hundredfold && pnpm test
 ```
 
 Expected: Both backend and frontend tests run and pass.
@@ -2070,11 +2070,11 @@ git commit -m "build: add test task to Turborepo pipeline, update root test scri
 ### Task 22: Mock engine for E2E tests
 
 **Files:**
-- Create: `packages/jinn/src/engines/mock.ts`
+- Create: `packages/hundredfold/src/engines/mock.ts`
 
 - [ ] **Step 1: Create MockEngine**
 
-Create `packages/jinn/src/engines/mock.ts`:
+Create `packages/hundredfold/src/engines/mock.ts`:
 
 ```typescript
 import { v4 as uuid } from 'uuid';
@@ -2113,13 +2113,13 @@ export class MockEngine implements Engine {
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd ~/Projects/jinn && pnpm build
+cd ~/Projects/hundredfold && pnpm build
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/engines/mock.ts
+git add packages/hundredfold/src/engines/mock.ts
 git commit -m "feat(api): mock engine for E2E tests - canned responses with simulated streaming"
 ```
 
@@ -2136,7 +2136,7 @@ git commit -m "feat(api): mock engine for E2E tests - canned responses with simu
 - [ ] **Step 1: Install Playwright**
 
 ```bash
-cd ~/Projects/jinn
+cd ~/Projects/hundredfold
 pnpm add -D @playwright/test
 npx playwright install chromium
 ```
@@ -2156,7 +2156,7 @@ export default defineConfig({
     headless: true,
   },
   webServer: {
-    command: 'JINN_TEST_MODE=1 JINN_PORT=7778 node packages/jinn/dist/bin/jinn.js start --foreground',
+    command: 'HUNDREDFOLD_TEST_MODE=1 HUNDREDFOLD_PORT=7778 node packages/hundredfold/dist/bin/hundredfold.js start --foreground',
     port: 7778,
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,
@@ -2173,7 +2173,7 @@ import { test, expect } from '@playwright/test'
 
 test('dashboard loads', async ({ page }) => {
   await page.goto('/')
-  await expect(page).toHaveTitle(/Jinn/)
+  await expect(page).toHaveTitle(/Hundredfold/)
   // Verify main nav links are present
   await expect(page.getByRole('link', { name: /chat/i })).toBeVisible()
   await expect(page.getByRole('link', { name: /cron/i })).toBeVisible()
@@ -2203,7 +2203,7 @@ test('no console errors on dashboard', async ({ page }) => {
 - [ ] **Step 5: Run E2E tests**
 
 ```bash
-cd ~/Projects/jinn && pnpm build && pnpm test:e2e
+cd ~/Projects/hundredfold && pnpm build && pnpm test:e2e
 ```
 
 Expected: All smoke tests pass. (Requires gateway to start in test mode.)

@@ -33,8 +33,8 @@ employee('side-project', 'side-dev', 'Side Dev', `claudeConfigDir: ${signedOut}`
 employee('side-project', 'side-missing', 'Side Missing', `claudeConfigDir: ${missing}`)
 employee('engineering', 'eng-dev', 'Eng Dev')
 
-const requireFromJinn = createRequire(path.join(repo, 'packages/jinn/package.json'))
-const Database = requireFromJinn('better-sqlite3')
+const requireFromHundredfold = createRequire(path.join(repo, 'packages/hundredfold/package.json'))
+const Database = requireFromHundredfold('better-sqlite3')
 const db = new Database(path.join(sandboxHome, 'sessions', 'registry.db'))
 const now = new Date().toISOString()
 const insert = db.prepare(`

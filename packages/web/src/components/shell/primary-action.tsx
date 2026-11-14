@@ -83,7 +83,7 @@ function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, w
       onClick={onClick}
       {...warm}
       className={cn(
-        // --space-3 is the mobile page gutter (`.jinn-scrollport`'s --jinn-gutter
+        // --space-3 is the mobile page gutter (`.hundredfold-scrollport`'s --hundredfold-gutter
         // floor, and what the external-scroll routes pad by), so the disc's
         // right edge lands on the card edge instead of 4px inside it.
         "absolute right-[var(--space-3)] z-30 inline-flex size-[var(--fab-size)] items-center justify-center rounded-full lg:hidden",

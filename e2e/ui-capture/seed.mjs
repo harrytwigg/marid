@@ -41,7 +41,7 @@ const CONVERSATION = [
   ['assistant', 'Added: **4. Update the changelog** with the user-facing changes, grouped by area.'],
 ]
 
-// JINN_CAPTURE_MESSAGES=<n> pads the chat with generic filler up to n messages, for the scroll
+// HUNDREDFOLD_CAPTURE_MESSAGES=<n> pads the chat with generic filler up to n messages, for the scroll
 // measurement. The extra turns vary in length and shape (prose, lists, code) like a real thread.
 const FILLER = [
   ['user', 'Can you walk me through the next step?'],
@@ -53,7 +53,7 @@ const FILLER = [
 ]
 
 function conversation() {
-  const wanted = Number(process.env.JINN_CAPTURE_MESSAGES ?? 0)
+  const wanted = Number(process.env.HUNDREDFOLD_CAPTURE_MESSAGES ?? 0)
   const rows = [...CONVERSATION]
   for (let i = 0; rows.length < wanted; i += 1) rows.push(FILLER[i % FILLER.length])
   return rows
@@ -96,14 +96,14 @@ function seedDelegationChat(db) {
 }
 
 function openDb(repo) {
-  const requireFromJinn = createRequire(path.join(repo, 'packages/jinn/package.json'))
-  const Database = requireFromJinn('better-sqlite3')
+  const requireFromHundredfold = createRequire(path.join(repo, 'packages/hundredfold/package.json'))
+  const Database = requireFromHundredfold('better-sqlite3')
   return new Database(path.join(sandboxHome, 'sessions', 'registry.db'))
 }
 
 function seedDb(repo) {
-  if (process.env.JINN_CAPTURE_SEED_ORG) writeOrg(sandboxHome)
-  if (process.env.JINN_CAPTURE_SEED_PAGES) writePages(sandboxHome)
+  if (process.env.HUNDREDFOLD_CAPTURE_SEED_ORG) writeOrg(sandboxHome)
+  if (process.env.HUNDREDFOLD_CAPTURE_SEED_PAGES) writePages(sandboxHome)
   const db = openDb(repo)
   const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:1'").get()
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')
