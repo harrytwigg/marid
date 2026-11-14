@@ -35,3 +35,8 @@ docker-compose.override.yml
 
 # Test and build output captured to a file next to the sources
 *.log
+
+# VitePress build output
+site/.vitepress/dist/
+site/.vitepress/cache/
+site/.vitepress/.temp/
