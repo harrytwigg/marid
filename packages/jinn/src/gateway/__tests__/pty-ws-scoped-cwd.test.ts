@@ -6,8 +6,8 @@ import type { PtyIdleSpawnOpts, PtyViewEngine } from "../../engines/pty-view-eng
 
 /**
  * The dashboard terminal of a department-scoped session attaches in the department's
- * stage directory, never in the Jinn home (FR-020b); anyone else's still attaches in
- * the Jinn home.
+ * stage directory, never in the Hundredfold home (FR-020b); anyone else's still attaches in
+ * the Hundredfold home.
  */
 
 const SLUG = "pty-scoped-dept";
@@ -75,14 +75,14 @@ describe("the dashboard terminal's idle spawn", () => {
     expect(fs.existsSync(path.join(engine.spawnCalls[0]!.cwd!, "CLAUDE.md"))).toBe(true);
   });
 
-  it("attaches anyone else in the Jinn home", () => {
+  it("attaches anyone else in the Hundredfold home", () => {
     hoisted.session = { id: "session-1", employee: null, scopeDepartment: null, model: "opus" };
     const engine = new FakeEngine();
     attach(engine);
     expect(engine.spawnCalls[0]!.cwd).toBe(JINN_HOME);
   });
 
-  it("starts no terminal for a scoped session whose stage directory cannot be prepared, rather than attach in the Jinn home", () => {
+  it("starts no terminal for a scoped session whose stage directory cannot be prepared, rather than attach in the Hundredfold home", () => {
     hoisted.session = { id: "session-1", employee: "pty-dev", scopeDepartment: SLUG, model: "opus" };
     const root = path.dirname(departmentStageDir(SLUG));
     fs.rmSync(root, { recursive: true, force: true });

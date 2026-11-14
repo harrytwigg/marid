@@ -104,7 +104,7 @@ describe("container CLI single-instance contract", () => {
     process.env.JINN_HOME = alternateHome;
     delete process.env.JINN_INSTANCE;
 
-    await expect(program.parseAsync(["node", "jinn", "setup"])).rejects.toThrow(/one Jinn instance|primary container home/i);
+    await expect(program.parseAsync(["node", "jinn", "setup"])).rejects.toThrow(/one Hundredfold instance|primary container home/i);
     expect(handlers.setup).not.toHaveBeenCalled();
   });
 
@@ -112,7 +112,7 @@ describe("container CLI single-instance contract", () => {
     process.env.JINN_HOME = primaryHome;
     delete process.env.JINN_INSTANCE;
 
-    await expect(program.parseAsync(["node", "jinn", "-i", "alternate", "start"])).rejects.toThrow(/one Jinn instance|primary container home/i);
+    await expect(program.parseAsync(["node", "jinn", "-i", "alternate", "start"])).rejects.toThrow(/one Hundredfold instance|primary container home/i);
     expect(handlers.start).not.toHaveBeenCalled();
   });
 
@@ -121,7 +121,7 @@ describe("container CLI single-instance contract", () => {
     process.env.JINN_HOME = primaryHome;
     delete process.env.JINN_INSTANCE;
 
-    await expect(program.parseAsync(["node", "jinn", "-i", "jinn", "start"])).rejects.toThrow(/one Jinn instance|primary container home/i);
+    await expect(program.parseAsync(["node", "jinn", "-i", "jinn", "start"])).rejects.toThrow(/one Hundredfold instance|primary container home/i);
     expect(handlers.start).not.toHaveBeenCalled();
   });
 

@@ -125,7 +125,7 @@ function describePiLaunch(opts: EngineRunOpts): string {
  * `stopReason === "error"` and an `errorMessage`; we propagate that as
  * EngineResult.error rather than swallowing it.
  *
- * Resume: Pi's session is keyed on the Jinn session id (`--session-id` + an
+ * Resume: Pi's session is keyed on the Hundredfold session id (`--session-id` + an
  * isolated `--session-dir`), so re-running with the same id continues the same
  * Pi conversation — no need to capture Pi's own session id.
  *
@@ -211,7 +211,7 @@ export class PiEngine implements InterruptibleEngine {
 
   async run(opts: EngineRunOpts): Promise<EngineResult> {
     const trackingId = opts.sessionId || `pi-${Date.now()}`;
-    // A Pi session id keyed on the Jinn session → resuming reuses the same id and
+    // A Pi session id keyed on the Hundredfold session → resuming reuses the same id and
     // continues the same Pi conversation.
     const piSessionId = opts.resumeSessionId || trackingId;
 

@@ -597,7 +597,7 @@ export function updateNote(
 /* ── Knowledge search + instance read (GRS-020b, re-homed here) ────
  *
  * Deterministic search over the company's institutional knowledge, plus capped reads
- * of files in the active Jinn instance. Search walks knowledge/ and docs/ through
+ * of files in the active Hundredfold instance. Search walks knowledge/ and docs/ through
  * {@link walkMarkdown} — the same recursive, symlink-refusing regime the Notes surface
  * above uses — so nested notes are findable and one module owns the directory. No LLM
  * anywhere: case-insensitive token-AND matching (every whitespace token must appear in
@@ -718,7 +718,7 @@ export function searchKnowledge(query: string, home: string = JINN_HOME, roots: 
   return hits.slice(0, KNOWLEDGE_SEARCH_LIMIT);
 }
 
-/** Read ONE file inside the active Jinn instance by relative path, starting at
+/** Read ONE file inside the active Hundredfold instance by relative path, starting at
  *  `offset` chars in and returning at most {@link KNOWLEDGE_FILE_CHAR_CAP} of them.
  *  SECURITY-CRITICAL: the path must be normalized and its realpath must resolve
  *  inside the realpath of the instance root. Traversal, absolute paths, control
@@ -726,7 +726,7 @@ export function searchKnowledge(query: string, home: string = JINN_HOME, roots: 
  *  containment, so it can never influence which file is resolved. */
 export function readKnowledgeFile(relPath: string, home: string = JINN_HOME, offset = 0): KnowledgeReadResult {
   if (typeof relPath !== "string" || relPath.length === 0 || relPath.length > 300) {
-    return { ok: false, reason: "invalid-path", detail: "path must be a relative path inside the Jinn instance" };
+    return { ok: false, reason: "invalid-path", detail: "path must be a relative path inside the Hundredfold instance" };
   }
   // GRS-020b-fix: REJECT (never strip) control bytes on the raw path — the
   // store is the defense-in-depth backstop so no caller (route or MCP tool)
@@ -738,7 +738,7 @@ export function readKnowledgeFile(relPath: string, home: string = JINN_HOME, off
   const traversal = segments.some((segment) => segment === "" || segment === "." || segment === "..");
   if (relPath !== relPath.trim() || path.isAbsolute(relPath) || path.win32.isAbsolute(relPath) || relPath.includes("\\") || traversal) {
     const shown = JSON.stringify(relPath.slice(0, 120));
-    return { ok: false, reason: "invalid-path", detail: `path must be a normalized relative path inside the Jinn instance — got ${shown}` };
+    return { ok: false, reason: "invalid-path", detail: `path must be a normalized relative path inside the Hundredfold instance — got ${shown}` };
   }
 
   let realHome: string;
@@ -746,7 +746,7 @@ export function readKnowledgeFile(relPath: string, home: string = JINN_HOME, off
   try {
     realHome = fs.realpathSync(home);
   } catch {
-    return { ok: false, reason: "not-found", detail: "the Jinn instance directory does not exist" };
+    return { ok: false, reason: "not-found", detail: "the Hundredfold instance directory does not exist" };
   }
   try {
     realFile = fs.realpathSync(path.join(home, ...segments));
@@ -754,7 +754,7 @@ export function readKnowledgeFile(relPath: string, home: string = JINN_HOME, off
     return { ok: false, reason: "not-found", detail: `no such instance file: ${relPath}` };
   }
   if (realFile === realHome || !isRealpathContained(realFile, realHome)) {
-    return { ok: false, reason: "forbidden", detail: `${relPath} resolves outside the Jinn instance and is not readable` };
+    return { ok: false, reason: "forbidden", detail: `${relPath} resolves outside the Hundredfold instance and is not readable` };
   }
   let stat: fs.Stats;
   try {

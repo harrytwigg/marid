@@ -217,7 +217,7 @@ describe("POST /api/work-items/:id/attachments (JSON path)", () => {
     expect(ok.status).toBe(201);
     expect(ok.body.attachment.uploadedBy).toBe("platform-worker");
 
-    // A direct Jinn-secrets path is refused by the existing read policy.
+    // A direct Hundredfold-secrets path is refused by the existing read policy.
     const secretsDir = path.join(tmp, "secrets");
     fs.mkdirSync(secretsDir, { recursive: true });
     const secret = path.join(secretsDir, "api-keys.json");

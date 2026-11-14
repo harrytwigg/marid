@@ -293,7 +293,7 @@ describe("the history pointer marker", () => {
 
     expect(reverted.engine).toBe("codex");
     expect((reverted.transportMeta as Record<string, unknown>).engineSyncMode).toBeUndefined();
-    expect(resolveSyncPrompt(reverted, "codex", "hello").promptToRun).toMatch(/^We switched engines in this Jinn session\./);
+    expect(resolveSyncPrompt(reverted, "codex", "hello").promptToRun).toMatch(/^We switched engines in this Hundredfold session\./);
   });
 
   it("gives way to the pasted catch-up when the revert hands claude back its own marker, and the stand-in's turns are caught up", () => {

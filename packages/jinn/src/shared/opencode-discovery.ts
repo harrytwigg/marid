@@ -31,7 +31,7 @@ export interface OpencodeDiscovery {
 /** What shapes one discovery: the two budgets, overridable so tests need not
  *  wait for real ones, and the environment every opencode it starts gets.
  *
- *  `shared/` may not import `engines/`, where Marid's own opencode variables
+ *  `shared/` may not import `engines/`, where Hundredfold's own opencode variables
  *  (`OPENCODE_DISABLE_FFF`) are defined, so the caller builds `env` and hands it
  *  in. It is the whole environment of the child; omitted, the gateway's own is
  *  inherited. */

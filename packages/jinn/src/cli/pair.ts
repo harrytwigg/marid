@@ -169,7 +169,7 @@ export function formatPairingInstructions(
 ): string {
   const minutes = pairing.ttlSeconds ? Math.max(1, Math.ceil(pairing.ttlSeconds / 60)) : 5;
   return [
-    "Pair a browser with Marid",
+    "Pair a browser with Hundredfold",
     "",
     // Always name the instance this code belongs to: a code only pairs the
     // instance that minted it, so an operator running several must see which one.
@@ -178,7 +178,7 @@ export function formatPairingInstructions(
     `Expires: ${minutes} minutes, single-use`,
     "",
     "On the other device:",
-    "  1. Open Marid on the other device using your Tailscale/LAN URL.",
+    "  1. Open Hundredfold on the other device using your Tailscale/LAN URL.",
     "  2. When Pair This Browser appears, enter the code above.",
     "  3. After pairing, refreshes open the normal app.",
     "",
@@ -195,7 +195,7 @@ export function formatPairedDevices(devices: PairedDeviceResponse[], instance: s
       "No paired browsers yet.",
       // Name the instance: a bare `jinn pair` mints a code for the DEFAULT
       // instance, which is the wrong one to hand someone reading this list.
-      `Create a code with ${pairCommandFor(instance)}, then open Marid from the other browser and enter it.`,
+      `Create a code with ${pairCommandFor(instance)}, then open Hundredfold from the other browser and enter it.`,
     ].join("\n");
   }
   const lines = ["Paired browsers", ""];

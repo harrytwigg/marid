@@ -53,7 +53,7 @@ function largeOrg(count: number, departments: number): Employee[] {
   return people;
 }
 
-/** Phrases the roster ladder is never allowed to spend: the posture, what Jinn
+/** Phrases the roster ladder is never allowed to spend: the posture, what Hundredfold
  *  is, the blocks glossary, and this instance's own conventions. */
 function expectDoctrineIntact(text: string): void {
   expect(text).toContain("COO-grade");

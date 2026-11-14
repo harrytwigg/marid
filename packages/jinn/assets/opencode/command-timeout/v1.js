@@ -1,5 +1,5 @@
 /**
- * Marid's command ceiling for opencode 1.x (staged by Marid in every session's
+ * Hundredfold's command ceiling for opencode 1.x (staged by Hundredfold in every session's
  * config; see docs/engines-opencode.md, "Command timeout").
  *
  * opencode's `bash` tool takes a `timeout` the model chooses, with no upper
@@ -12,7 +12,7 @@
  * LOADER CONSTRAINT: opencode 1.x calls every export of a plugin module as a
  * plugin, so this file exports exactly one thing.
  */
-export const MaridCommandTimeout = async () => {
+export const HundredfoldCommandTimeout = async () => {
   const ceiling = Number(process.env.JINN_OPENCODE_COMMAND_TIMEOUT_MS);
   if (!(ceiling > 0)) return {};
   return {

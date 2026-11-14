@@ -32,10 +32,10 @@ export function compactCommandRefusal(
   const unsupported = compactionUnsupported(engine, opencodeMode);
   if (unsupported === "opencode-run-mode") {
     return "`/compact` isn't available here: opencode can only compact in server mode (`engines.opencode.mode: server`), "
-      + "and this instance runs `opencode run`, which has no compaction Jinn can call. Nothing was sent to the model.";
+      + "and this instance runs `opencode run`, which has no compaction Hundredfold can call. Nothing was sent to the model.";
   }
   if (unsupported === "no-native-compaction") {
-    return `\`/compact\` isn't supported on the ${engine} engine: Jinn can only drive the native compaction of `
+    return `\`/compact\` isn't supported on the ${engine} engine: Hundredfold can only drive the native compaction of `
       + `${SELF_COMPACTION_ENGINES.join(" and ")}. Nothing was sent to the model.`;
   }
   if (!hasEngineSession) {

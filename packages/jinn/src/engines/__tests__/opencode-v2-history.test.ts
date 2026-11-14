@@ -6,7 +6,7 @@ import type { V2Message } from "../opencode-v2-events.js";
 
 /**
  * What an OpenCode 2 session's history says about requests cancelled in it, the
- * notes Jinn keeps in the session's metadata, and the event stream's framing.
+ * notes Hundredfold keeps in the session's metadata, and the event stream's framing.
  */
 
 let seq = 0;
@@ -46,7 +46,7 @@ describe("cancelledV2Requests", () => {
     expect(cancelledV2Requests(history, false)).toEqual(["padded"]);
   });
 
-  it("steps over Jinn's own items in an interrupted execution", () => {
+  it("steps over Hundredfold's own items in an interrupted execution", () => {
     const history = newestFirst(user("operator asked"), user("jinn prompt", { jinn: "prompt" }), assistant("error"), idle("interrupted"));
     expect(cancelledV2Requests(history, false)).toEqual(["operator asked"]);
   });
@@ -77,7 +77,7 @@ describe("cancelledV2Requests", () => {
     expect(cancelledV2Requests(history, false)).toEqual(["cancelled"]);
   });
 
-  it("ends the walk at a Jinn prompt that carried a notice", () => {
+  it("ends the walk at a Hundredfold prompt that carried a notice", () => {
     const history = newestFirst(
       user("named in the notice"), idle("interrupted"),
       user("jinn prompt with notice", { jinn: "prompt", notice: true }), assistant("error"),
@@ -93,7 +93,7 @@ describe("cancelledV2Requests", () => {
   });
 });
 
-describe("Jinn's notes on a session", () => {
+describe("Hundredfold's notes on a session", () => {
   it("reads nothing from metadata that has no jinn key", () => {
     expect(jinnSessionNotes(undefined)).toEqual({ stopped: [], reseed: false });
     expect(jinnSessionNotes({ other: 1 })).toEqual({ stopped: [], reseed: false });

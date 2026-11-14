@@ -25,7 +25,7 @@ import { LEGACY_CODENAME, NAMES } from "./codename.js";
 export const FARM_FILTERED_DIRS = ["sessions", "workflows"] as const;
 
 /** A real file FARM_SCRIPT writes into every staged home. Its presence is how
- *  Marid code knows the home it was handed is a remote session's stage, whose
+ *  Hundredfold code knows the home it was handed is a remote session's stage, whose
  *  linked entries lead to the gateway's live data. */
 export const REMOTE_STAGE_MARKER = `.${NAMES.codename}-remote-stage`;
 

@@ -164,10 +164,10 @@ describe("prompt shaping", () => {
 });
 
 describe("cancelledRequests (what the model is told the user cancelled)", () => {
-  // The operator's cancelled requests; the Jinn prompts the user stopped are below.
+  // The operator's cancelled requests; the Hundredfold prompts the user stopped are below.
   const cancelledRequests = (...args: Parameters<typeof cancelledAndStopped>) => cancelledAndStopped(...args).cancelled;
   // Shapes as opencode 1.18.32 stores them: a user message and its replies, a
-  // reply's error, and the metadata / synthetic flag on the parts Jinn posts.
+  // reply's error, and the metadata / synthetic flag on the parts Hundredfold posts.
   // Times default to the id's number in seconds, so the history's order is also its timeline.
   const at = (id: string) => Number(id.slice(4)) * 1000;
   const operator = (id: string, text: string, created = at(id)) => ({ info: { id, role: "user", time: { created } }, parts: [{ type: "text", text }] });
@@ -206,9 +206,9 @@ describe("cancelledRequests (what the model is told the user cancelled)", () => 
     ], false)).toEqual(["first", "second"]);
   });
 
-  it("steps over Jinn's own prompts that were aborted or dropped, and never calls one of them cancelled", () => {
-    // A Jinn prompt queued behind the operator's is dropped (no reply) by the
-    // operator's abort; one Jinn stopped itself (a restart, a timeout) is not the user's cancel.
+  it("steps over Hundredfold's own prompts that were aborted or dropped, and never calls one of them cancelled", () => {
+    // A Hundredfold prompt queued behind the operator's is dropped (no reply) by the
+    // operator's abort; one Hundredfold stopped itself (a restart, a timeout) is not the user's cancel.
     expect(cancelledRequests([
       operator("msg_01", "rm -rf build"), reply("msg_02", "msg_01", "aborted"),
       jinn("msg_03", "queued jinn work"),
@@ -271,20 +271,20 @@ describe("cancelledRequests (what the model is told the user cancelled)", () => 
     expect(notice).not.toContain("x".repeat(600));
   });
 
-  // a Jinn prompt the user stopped, as its turn marks it (metadata PATCHed on 1.18.32).
+  // a Hundredfold prompt the user stopped, as its turn marks it (metadata PATCHed on 1.18.32).
   const stopped = (id: string, text: string, request?: string) => ({
     info: { id, role: "user", time: { created: at(id) } },
     parts: [{ type: "text", text, metadata: { ...JINN_PROMPT_METADATA, stopped: "user", ...(request === undefined ? {} : { request }) } }],
   });
 
-  it("names a Jinn prompt the user stopped, aborted or dropped, apart from the operator's cancels", () => {
+  it("names a Hundredfold prompt the user stopped, aborted or dropped, apart from the operator's cancels", () => {
     expect(cancelledAndStopped([
       jinn("msg_01", "answered"), reply("msg_02", "msg_01", "done"),
       stopped("msg_03", "run sleep 45"), reply("msg_04", "msg_03", "aborted"),
     ], false)).toEqual({ cancelled: [], stopped: ["run sleep 45"] });
     // Queued behind another prompt when the stop's abort dropped it: no reply at all.
     expect(cancelledAndStopped([stopped("msg_01", "queued, then stopped")], false)).toEqual({ cancelled: [], stopped: ["queued, then stopped"] });
-    // Both kinds in one history, each list oldest first; an unmarked Jinn stop between them is stepped over.
+    // Both kinds in one history, each list oldest first; an unmarked Hundredfold stop between them is stepped over.
     expect(cancelledAndStopped([
       stopped("msg_01", "first stop"), reply("msg_02", "msg_01", "aborted"),
       operator("msg_03", "read /etc/hostname"), reply("msg_04", "msg_03", "aborted"),
@@ -313,22 +313,22 @@ describe("cancelledRequests (what the model is told the user cancelled)", () => 
     ], false).stopped).toEqual(["(a request with no text)"]);
   });
 
-  // A Jinn prompt as posted with a notice ahead of it (a synthetic part of either kind).
+  // A Hundredfold prompt as posted with a notice ahead of it (a synthetic part of either kind).
   const noticed = (id: string, text: string, kind: "cancelled-requests" | "stopped-requests", mark?: "stopped") => ({
     info: { id, role: "user", time: { created: at(id) } },
     parts: [
-      { type: "text", text: "[Jinn] Before this message, …", synthetic: true, metadata: { jinn: kind } },
+      { type: "text", text: "[Hundredfold] Before this message, …", synthetic: true, metadata: { jinn: kind } },
       { type: "text", text, metadata: { ...JINN_PROMPT_METADATA, ...(mark ? { stopped: "user", request: text } : {}) } },
     ],
   });
 
-  it("a request is named once; a Jinn prompt that carried a notice ends the walk, cut short or not", () => {
+  it("a request is named once; a Hundredfold prompt that carried a notice ends the walk, cut short or not", () => {
     // Stop A; B carried the notice naming A, then a restart (or a new message) cut B short, unmarked.
     expect(cancelledAndStopped([
       stopped("msg_01", "A"), reply("msg_02", "msg_01", "aborted"),
       noticed("msg_03", "B: continue A", "stopped-requests"), reply("msg_04", "msg_03", "aborted"),
     ], false)).toEqual({ cancelled: [], stopped: [] });
-    // The same for an operator's cancel named on a Jinn prompt a restart then cut short.
+    // The same for an operator's cancel named on a Hundredfold prompt a restart then cut short.
     expect(cancelledAndStopped([
       operator("msg_01", "read /etc/hostname"), reply("msg_02", "msg_01", "aborted"),
       noticed("msg_03", "jinn work", "cancelled-requests"), reply("msg_04", "msg_03", "aborted"),
@@ -363,8 +363,8 @@ describe("cancelledRequests (what the model is told the user cancelled)", () => 
     const both = {
       info: { id: "msg_05", role: "user", time: { created: at("msg_05") } },
       parts: [
-        { type: "text", text: "[Jinn] … R", synthetic: true, metadata: { jinn: "cancelled-requests" } },
-        { type: "text", text: "[Jinn] … A", synthetic: true, metadata: { jinn: "stopped-requests" } },
+        { type: "text", text: "[Hundredfold] … R", synthetic: true, metadata: { jinn: "cancelled-requests" } },
+        { type: "text", text: "[Hundredfold] … A", synthetic: true, metadata: { jinn: "stopped-requests" } },
         { type: "text", text: "B", metadata: JINN_PROMPT_METADATA },
       ],
     };

@@ -1,11 +1,11 @@
 /**
- * Debug helper: dump the exact context Jinn constructs for the COO vs an employee.
+ * Debug helper: dump the exact context Hundredfold constructs for the COO vs an employee.
  *
  * Run:  npx tsx scripts/dump-context.ts [employeeName]
  * Default employee: content-lead
  *
  * Emits 4 files into ~/.jinn/debug-context/:
- *   coo-system-prompt.md        — what Jinn PASSES via --settings appendSystemPrompt (COO/Jimbo)
+ *   coo-system-prompt.md        — what Hundredfold PASSES via --settings appendSystemPrompt (COO/Jimbo)
  *   employee-system-prompt.md   — same, for the employee
  *   coo-CLAUDE.md               — what Claude AUTO-LOADS from cwd (~/.jinn/CLAUDE.md)
  *   employee-CLAUDE.md          — identical file (both run cwd=~/.jinn) — proves employees inherit the COO manual
@@ -47,7 +47,7 @@ const cooPrompt = buildContext({ ...common });
 const empPrompt = buildContext({ ...common, employee });
 
 const banner = (title: string, bytes: number) =>
-  `<!-- ${title}\n     ${bytes} bytes / ~${Math.round(bytes / 4)} tokens\n     This is the appendSystemPrompt Jinn writes into the --settings JSON and passes as: claude --settings <file>\n-->\n\n`;
+  `<!-- ${title}\n     ${bytes} bytes / ~${Math.round(bytes / 4)} tokens\n     This is the appendSystemPrompt Hundredfold writes into the --settings JSON and passes as: claude --settings <file>\n-->\n\n`;
 
 writeFileSync(join(outDir, "coo-system-prompt.md"), banner("COO (Jimbo) — PASSED system prompt", cooPrompt.length) + cooPrompt);
 writeFileSync(join(outDir, "employee-system-prompt.md"), banner(`${empName} — PASSED system prompt`, empPrompt.length) + empPrompt);

@@ -88,6 +88,7 @@ import { sendReceipt, supersedeRequestError, type SupersedeOutcome } from "../se
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { endStopOnDeliberateSend, isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
+import { LEGACY_PORTAL_NAME, PRODUCT_NAME } from "../shared/brand.js";
 import { interruptSessionTurn, killSessionEngines } from "./session-interrupt.js";
 export { interruptSessionTurn };
 export {
@@ -424,7 +425,7 @@ export interface ApiContext {
   backgroundActivity?: Map<string, RuntimeActivityInfo>;
   /** Gateway auth token for seamless browser/CLI access when auth is required. */
   gatewayAuthToken?: string;
-  /** Test-injectable Jinn home for auth device storage. Defaults to shared JINN_HOME. */
+  /** Test-injectable Hundredfold home for auth device storage. Defaults to shared JINN_HOME. */
   jinnHome?: string;
   /** Test-injectable gateway restart primitive. Defaults to lifecycle.restartDetached(). */
   restartGateway?: (options: RestartDetachedOptions) => void;
@@ -1189,7 +1190,7 @@ function workspaceDisplayName(instance: Instance): string {
     }
   } catch { /* registry name fallback */ }
   const slug = currentInstanceName(instance.name).replace(new RegExp(`^${NAMES.codename}-`), "");
-  return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : "Jinn";
+  return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : PRODUCT_NAME;
 }
 
 function processIsAlive(pid: number): boolean {
@@ -1790,7 +1791,7 @@ export async function handleApiRequest(
       return json(res, { query: q, results: searchKnowledge(q, jinnHome) });
     }
 
-    // GET /api/knowledge/read — read ONE file inside the active Jinn instance.
+    // GET /api/knowledge/read — read ONE file inside the active Hundredfold instance.
     // SECURITY-CRITICAL: the store enforces instance-root containment, so
     // `..`, absolute paths, symlink escapes and bad offsets are refused (400/403). This route is
     // deliberately SEPARATE from the operator/UI GET /api/files/read.
@@ -1806,7 +1807,7 @@ export async function handleApiRequest(
         return badRequest(res, "path contains control bytes");
       }
       const rel = readCleanSearchParam(url, "path");
-      if (!rel) return badRequest(res, 'path is required — use a relative path inside the Jinn instance, e.g. "knowledge/some-file.md"');
+      if (!rel) return badRequest(res, 'path is required — use a relative path inside the Hundredfold instance, e.g. "knowledge/some-file.md"');
       const result = readKnowledgeFile(rel, jinnHome, Number(url.searchParams.get("offset") ?? 0));
       if (!result.ok) {
         if (result.reason === "forbidden") return json(res, { error: result.detail }, 403);
@@ -4574,7 +4575,7 @@ export async function handleApiRequest(
       let todoPrefix: string | null;
       try {
         todoPrefix = resolveTodoIdPrefix(
-          config.portal?.companyName ?? "Jinn",
+          config.portal?.companyName ?? LEGACY_PORTAL_NAME,
           config.portal?.companyPrefix,
         );
       } catch {
@@ -4612,7 +4613,7 @@ export async function handleApiRequest(
       // prefix mints future Todos under its own sequence. Only validity is checked.
       if (companyPrefix !== undefined && companyPrefix !== null) {
         try {
-          resolveTodoIdPrefix(companyName ?? config.portal?.companyName ?? "Jinn", companyPrefix);
+          resolveTodoIdPrefix(companyName ?? config.portal?.companyName ?? LEGACY_PORTAL_NAME, companyPrefix);
         } catch (error) {
           return badRequest(res, error instanceof Error ? error.message : "Invalid Todo prefix");
         }
@@ -4620,7 +4621,7 @@ export async function handleApiRequest(
       if (companyName !== undefined || companyPrefix !== undefined) {
         try {
           resolveTodoIdPrefix(
-            companyName ?? config.portal?.companyName ?? "Jinn",
+            companyName ?? config.portal?.companyName ?? LEGACY_PORTAL_NAME,
             companyPrefix === null ? undefined : companyPrefix ?? config.portal?.companyPrefix,
           );
         } catch (error) {
@@ -4652,7 +4653,7 @@ export async function handleApiRequest(
       logger.info(`Onboarding: company configured=${companyName !== undefined}, portal name="${portalName}", operator="${operatorName}", language="${language}"`);
 
       // Partial posts (e.g. just an operator emoji) must not rewrite the manual:
-      // omitted fields would reset the name to "Jinn" and drop the language section.
+      // omitted fields would reset the name to its default and drop the language section.
       if (portalName !== undefined || language !== undefined) {
         personalizeOperatingManual(JINN_HOME, {
           portalName: updated.portal.portalName,

@@ -170,11 +170,11 @@ export interface JinnConfig {
       /** Server-mode tuning; ignored in `run` mode. */
       server?: OpencodeServerConfig;
       /**
-       * Default true: Marid sets `OPENCODE_DISABLE_FFF=1` on every opencode process
+       * Default true: Hundredfold sets `OPENCODE_DISABLE_FFF=1` on every opencode process
        * it starts (run and server, local and remote), which turns off opencode's
        * bundled fff file indexer. On a work root with many nested repos or worktrees
        * that indexer pegs a CPU (anomalyco/opencode#50719). Set false to let opencode
-       * run it. false only means Marid does not set the variable: one the gateway
+       * run it. false only means Hundredfold does not set the variable: one the gateway
        * inherits from its own environment is not stripped. Drop this option once
        * opencode bundles `@ff-labs/fff-bun` >= 0.11 or #50719 is fixed.
        */
@@ -182,7 +182,7 @@ export interface JinnConfig {
       /**
        * The longest one shell command of an opencode turn may run, in ms
        * (default 1800000, 30 min; 0 turns it off). opencode lets the model pick a
-       * command's timeout with no upper bound; Marid stages a plugin that caps it
+       * command's timeout with no upper bound; Hundredfold stages a plugin that caps it
        * at this, on 1.x and 2.x, local and remote. 2.x background commands are
        * not capped. See docs/engines-opencode.md.
        */

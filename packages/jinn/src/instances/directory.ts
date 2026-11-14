@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { LEGACY_NAMES, NAMES, currentInstanceName, isDefaultInstanceName, sameInstanceName, type Names } from "../shared/codename.js";
 import { readEnv } from "../shared/codename-env.js";
+import { PRODUCT_NAME } from "../shared/brand.js";
 
 export const INSTANCE_DIRECTORY_SCHEMA_VERSION = 2 as const;
 
@@ -220,7 +221,7 @@ export function ensureDefaultInstance(): void {
   if (instances.some((instance) => isDefaultInstanceName(instance.name))) return;
   saveInstances([{
     name: NAMES.codename,
-    displayName: "Jinn",
+    displayName: PRODUCT_NAME,
     port: 7777,
     home: path.join(os.homedir(), `.${NAMES.codename}`),
     createdAt: new Date().toISOString(),

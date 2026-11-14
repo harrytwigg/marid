@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Jinn container image. InteractiveClaudeEngine always spawns `claude` with
+# Hundredfold container image. InteractiveClaudeEngine always spawns `claude` with
 # --dangerously-skip-permissions, which disables the approval gate for everything
 # the process can reach; here that is only the paths deliberately mounted in.
 

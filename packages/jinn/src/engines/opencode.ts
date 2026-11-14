@@ -223,7 +223,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     onStream: ((delta: StreamDelta) => void) | null,
     accounts: ReturnType<OpencodeAccountsReader>,
   ): Promise<EngineResult> {
-    // A server belongs to a Jinn session; a turn without one has nothing to reuse it.
+    // A server belongs to a Hundredfold session; a turn without one has nothing to reuse it.
     if (this.servers && this.readMode() === "server" && opts.sessionId) {
       return await this.runOnServer(opts, trackingId, onStream);
     }
@@ -346,7 +346,7 @@ export class OpencodeEngine implements InterruptibleEngine {
   ): Promise<EngineResult | Error> {
     const servers = this.servers!;
     // `/compact` is opencode's own compaction, not a prompt (see
-    // opencode-server-compaction.ts) — Jinn's self-compaction queues it, and an
+    // opencode-server-compaction.ts) — Hundredfold's self-compaction queues it, and an
     // operator may type it.
     if (isCompactCommand(opts.prompt)) return await this.runServerCompaction(server, slot, opts, trackingId);
     // Stop the server once the hold is released: its API drifted, or it never streamed.

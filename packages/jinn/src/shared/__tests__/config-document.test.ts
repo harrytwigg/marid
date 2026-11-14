@@ -17,7 +17,7 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const SAMPLE = `# Jinn configuration
+const SAMPLE = `# Hundredfold configuration
 gateway:
   # the port the dashboard is served on
   port: 7777
@@ -33,7 +33,7 @@ describe("patchConfigFile", () => {
     expect(patchConfigFile(configPath, [{ path: ["gateway", "port"], value: 8080 }])).toBe(true);
 
     const out = fs.readFileSync(configPath, "utf8");
-    expect(out).toContain("# Jinn configuration");
+    expect(out).toContain("# Hundredfold configuration");
     expect(out).toContain("# the port the dashboard is served on");
     expect(out).toContain("port: 8080");
     expect(out).toContain("host: 127.0.0.1");

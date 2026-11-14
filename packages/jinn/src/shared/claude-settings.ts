@@ -171,7 +171,7 @@ export function seedTrust(claudeJsonFile: string, projectDir: string, opts: { cr
   const seeded = applyTrustSeed(data, realDir);
   if (!seeded.changed) return;
   // About to modify the user's real ~/.claude.json — keep a one-time backup of the
-  // pre-Jinn original (no timestamped proliferation; first write wins).
+  // pre-Hundredfold original (no timestamped proliferation; first write wins).
   const backupPath = `${claudeJsonFile}.jinn-backup`;
   if (fs.existsSync(claudeJsonFile) && !fs.existsSync(backupPath)) {
     try { fs.copyFileSync(claudeJsonFile, backupPath, fs.constants.COPYFILE_EXCL); } catch { /* best effort */ }

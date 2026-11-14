@@ -22,6 +22,7 @@ import type { WorkItemEventKind } from './event-log.js';
 import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from './operator-assignee.js';
 import { tapBoardEvent } from './board-event-tap.js';
 import { REVIEW_ADDRESSEE_REASON_PREFIX } from './recovery.js';
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -452,7 +453,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
  *  explicit `portal.companyPrefix` override; configless homes keep `JIN`. */
 export function resolveCompanyPrefix(): string {
   const portal = fs.existsSync(CONFIG_PATH) ? loadConfig().portal : undefined;
-  return resolveTodoIdPrefix(portal?.companyName ?? 'Jinn', portal?.companyPrefix);
+  return resolveTodoIdPrefix(portal?.companyName ?? LEGACY_PORTAL_NAME, portal?.companyPrefix);
 }
 
 /** The closed-department policy (`gateway.todoDepartments`, JIN-1), or null

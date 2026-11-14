@@ -859,7 +859,7 @@ export async function startGateway(
 
   // Runtime activity after the foreground turn has settled (in-memory only).
   // Native CLI schedulers such as /loop wake inside the PTY without entering
-  // Jinn's queue; engines can expose onRuntimeActivity so the UI stops showing
+  // Hundredfold's queue; engines can expose onRuntimeActivity so the UI stops showing
   // those sessions as transport-idle while the native work is awake.
   const backgroundActivity = runtimeActivity;
   // A retry against a standing usage limit is reported as waiting until it shows output; nothing is

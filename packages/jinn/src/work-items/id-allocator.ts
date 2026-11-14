@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
 import { formatTodoId, parseTodoIdPrefix, resolveTodoIdPrefix } from "./id.js";
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 /**
  * Todo id allocation: burn an ordinal, hand back a one-time claim, and let the
@@ -82,7 +83,7 @@ export function allocateWorkItemId(
 export function allocateWorkItemIdV1ForTest(
   db: DatabaseType,
   now = new Date().toISOString(),
-  companyName: unknown = "Jinn",
+  companyName: unknown = LEGACY_PORTAL_NAME,
   companyPrefix?: unknown,
 ): WorkItemAllocationClaim {
   registerWorkItemIdentityFunctions(db);

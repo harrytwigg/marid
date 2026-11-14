@@ -128,12 +128,12 @@ const OSC8_LINK_HANDLER = { activate: openTerminalLink };
  * Live xterm.js view onto a session's interactive PTY, served over /ws/pty/:sessionId.
  *
  * Two input paths, deliberately separate:
- *   - The parent's <ChatInput /> (a flex sibling rendered by chat-pane) is an ordinary Jinn
+ *   - The parent's <ChatInput /> (a flex sibling rendered by chat-pane) is an ordinary Hundredfold
  *     turn: it POSTs to /api/sessions/:id/message with `mode: "interactive"`, and the engine
  *     injects the prompt into this same PTY, so it lands in the transcript and appears here.
  *   - On a desktop (fine pointer) the terminal itself is a real terminal: click it
  *     and keystrokes, pastes and mouse reports go straight to the PTY as `input` frames.
- *     That is the operator driving the TUI, not a Jinn turn. xterm's automatic replies to
+ *     That is the operator driving the TUI, not a Hundredfold turn. xterm's automatic replies to
  *     terminal queries are suppressed so only what the operator did reaches the PTY.
  *   - Touch devices keep the display-only terminal (`disableStdin`): composer + keybar, with
  *     swipe-to-scroll. A swipe over a full-screen TUI that tracks the mouse (opencode)

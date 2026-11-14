@@ -114,12 +114,12 @@ describe("MspClient", () => {
 
   it("initialize sends the client info and capabilities, then the initialized notification", async () => {
     const { client, written, say, flush } = pair();
-    const done = client.initialize({ clientInfo: { name: "marid", version: "1.2.3" }, userInputDialogs: false });
+    const done = client.initialize({ clientInfo: { name: "hundredfold", version: "1.2.3" }, userInputDialogs: false });
     await flush();
     expect(written[0]).toMatchObject({
       id: 1,
       method: "initialize",
-      params: { clientInfo: { name: "marid", version: "1.2.3" }, capabilities: { userInputDialogs: false } },
+      params: { clientInfo: { name: "hundredfold", version: "1.2.3" }, capabilities: { userInputDialogs: false } },
     });
     expect(written).toHaveLength(1);
     say({ id: 1, result: { serverInfo: { name: "muse", version: "1.4.8" } } });
@@ -129,9 +129,9 @@ describe("MspClient", () => {
 
   it("omits capabilities when none were asked for", async () => {
     const { client, written, say, flush } = pair();
-    const done = client.initialize({ clientInfo: { name: "marid", version: "1" } });
+    const done = client.initialize({ clientInfo: { name: "hundredfold", version: "1" } });
     await flush();
-    expect(written[0]!.params).toEqual({ clientInfo: { name: "marid", version: "1" } });
+    expect(written[0]!.params).toEqual({ clientInfo: { name: "hundredfold", version: "1" } });
     say({ id: 1, result: {} });
     await done;
   });

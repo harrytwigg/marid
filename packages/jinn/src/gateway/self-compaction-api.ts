@@ -142,7 +142,7 @@ function compactableSession(res: ServerResponse, callerId: string): Session | un
   return session;
 }
 
-/** A plain compaction of an engine Jinn cannot compact is refused; answers false when it did. */
+/** A plain compaction of an engine Hundredfold cannot compact is refused; answers false when it did. */
 function engineCompactionRefusal(res: ServerResponse, session: Session, options: SelfCompactionApiOptions): boolean {
   const refusal = selfCompactionRefusal(session.engine, options.opencodeMode());
   if (refusal) send(res, 409, { error: refusal });

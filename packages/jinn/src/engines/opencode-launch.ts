@@ -85,7 +85,7 @@ export interface OpencodeLaunchPlan {
 export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", ...envNamesFor(["HOME_IDENTITY", "TAKE_PORT"])];
 
 /**
- * What Marid itself sets on every opencode process, local or remote.
+ * What Hundredfold itself sets on every opencode process, local or remote.
  *
  * `OPENCODE_DISABLE_FFF` turns off opencode's bundled file indexer and watcher,
  * which pegs a CPU on a work root with many nested repos or worktrees
@@ -108,7 +108,7 @@ export function opencodeProcessEnv(opts: OpencodeProcessOptions): Record<string,
   };
 }
 
-/** What Marid's own settings put on every opencode process. */
+/** What Hundredfold's own settings put on every opencode process. */
 export interface OpencodeProcessOptions {
   disableFff: boolean;
   /** `engines.opencode.commandTimeoutMs`, resolved; 0 or absent: no ceiling. */
@@ -134,7 +134,7 @@ export function cleanEnv(sessionId: string, opts: OpencodeProcessOptions): Recor
 
 /** The environment for opencode runs that belong to no session: model discovery.
  *  `models` starts a private opencode server (always on 2.x with `--standalone`),
- *  so it needs the same scrubbing and Marid-set variables as a turn, minus the
+ *  so it needs the same scrubbing and Hundredfold-set variables as a turn, minus the
  *  session identity. `disableFff` is read from the config as the engine does. */
 export function opencodeDiscoveryEnv(config: JinnConfig): Record<string, string> {
   // Discovery is no session's: it holds no account's key.

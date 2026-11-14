@@ -6,10 +6,10 @@ import { expect } from "vitest";
  *  directory reports 0o777 — every owner-only assertion fails for a reason the
  *  code cannot fix.
  *
- *  IMPORTANT: this is a gap in the platform, not only in the tests. Files Jinn
+ *  IMPORTANT: this is a gap in the platform, not only in the tests. Files Hundredfold
  *  intends to be owner-only (gateway tokens, pairing challenges, per-session MCP
  *  configs carrying capabilities, instance keys) are NOT restricted on Windows;
- *  achieving that needs ACLs, which Jinn does not set today. Skipping the
+ *  achieving that needs ACLs, which Hundredfold does not set today. Skipping the
  *  assertion keeps the suite honest on Windows without implying the property
  *  holds there. */
 export const POSIX_MODES_SUPPORTED = process.platform !== "win32";

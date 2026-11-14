@@ -79,7 +79,7 @@ export function departmentScopeSections(opts: ScopeInputs): Array<{ tier: number
     "## Department scope",
     `This session is scoped to department **${department}**. The jinn tools reach only this department: its Todos, its members, sessions bound to it, and its Notes under \`knowledge/departments/${department}/\`. Everything else answers as not found or refused.`,
     `- Create and work Todos in ${department} only; delegate and spawn only to its members. You may reply to the session that asked you for work.`,
-    "- Use the jinn tools for company state. Do not use your shell to read the Jinn home, other repositories, or other sessions' transcripts.",
+    "- Use the jinn tools for company state. Do not use your shell to read the Hundredfold home, other repositories, or other sessions' transcripts.",
     `- Keep your working state in \`knowledge/departments/${department}/state.md\` through the note tools.`,
     `- ${departmentSkillsLine(department)}`,
     ...workAreaLines(opts.employee),

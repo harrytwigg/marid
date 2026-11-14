@@ -26,7 +26,7 @@ import { cloneFromV1Record, collectClone, type CloneSink } from "./opencode-clon
  * `GET /api/model` instead, asked through `opencode api model.list
  * --standalone`: the CLI starts a private server, prints the answer as JSON and
  * stops it. That keeps discovery a one-shot command like every other step here,
- * independent of whether Marid runs a server of its own (run mode has none, and
+ * independent of whether Hundredfold runs a server of its own (run mode has none, and
  * server mode's servers are per session and come and go).
  */
 

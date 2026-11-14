@@ -39,7 +39,7 @@ function legacyApproval(workItemId: string, extra: LegacyApproval = {}): string 
   const id = `wap_${(++seq).toString(16).padStart(12, "0")}`;
   db.prepare(`INSERT INTO work_item_approvals (id, work_item_id, state, request, target, target_kind, requested_by, requested_at, escalated_at)
               VALUES (?, ?, ?, ?, ?, ?, 'platform-worker', ?, ?)`)
-    .run(id, workItemId, extra.state ?? "pending", `Question ${seq}?`, extra.target ?? "Jinn", extra.target ? "employee" : "virtual",
+    .run(id, workItemId, extra.state ?? "pending", `Question ${seq}?`, extra.target ?? "Hundredfold", extra.target ? "employee" : "virtual",
       new Date().toISOString(), extra.escalated ? new Date().toISOString() : null);
   if (extra.options) db.prepare("INSERT INTO work_item_approval_choices (approval_id, options) VALUES (?, ?)").run(id, JSON.stringify(extra.options));
   if (extra.operatorOnly) db.prepare("INSERT INTO work_item_approval_operator_only (approval_id) VALUES (?)").run(id);
@@ -50,7 +50,7 @@ const stopCause = (id: string) =>
   db.prepare("SELECT parked_until, unblock_what, unblock_who FROM work_item_stop_cause WHERE work_item_id = ?").get(id);
 
 const operatorQueue = () =>
-  store.listWorkItems({ needsAttentionFor: "Jinn", needsAttentionOperator: true }).map((item) => item.id);
+  store.listWorkItems({ needsAttentionFor: "Hundredfold", needsAttentionOperator: true }).map((item) => item.id);
 
 describe("carrying pending approvals over", () => {
   it("stops an open Todo in blocked for the operator and posts the question, its options and the asker, on boot", () => {

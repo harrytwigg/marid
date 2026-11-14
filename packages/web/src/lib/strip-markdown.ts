@@ -2,7 +2,7 @@
  * Strip Markdown syntax from text, leaving plain readable prose.
  *
  * Used in two places that must NOT show (or speak) raw markdown:
- *   - the Jinn Talk transcript caption (mirrors spoken audio), and
+ *   - the Hundredfold Talk transcript caption (mirrors spoken audio), and
  *   - `cleanPreview` (session preview labels), which layers @mention/#NNN
  *     stripping + capitalization on top.
  *

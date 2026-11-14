@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Jinn remote trust seed. Staged onto a remote SSH host and invoked there as:
+// Hundredfold remote trust seed. Staged onto a remote SSH host and invoked there as:
 //   node remote-trust-seed.mjs <remoteProjectDir>
 //
 // The gateway seeds its OWN ~/.claude.json at boot (src/gateway/server.ts, seedTrust).
@@ -10,7 +10,7 @@
 // "Do you want to proceed?" shape, so the trust dialog fires no Notification hook and
 // the first turn waits forever on a prompt nobody will ever answer.
 //
-// Standalone by necessity — the remote host has no Jinn install, so this file carries a
+// Standalone by necessity — the remote host has no Hundredfold install, so this file carries a
 // copy of applyTrustSeed() from src/shared/claude-settings.ts rather than importing it.
 // src/shared/__tests__/remote-trust-seed.test.ts runs this script and deep-compares the
 // JSON it produces against applyTrustSeed()'s, so the copy cannot drift unnoticed.
@@ -110,7 +110,7 @@ function seedLocked(claudeJsonFile, realDir) {
   }
 
   // About to modify a real user's ~/.claude.json on a machine that is not ours — keep a
-  // one-time backup of the pre-Jinn original (no timestamped proliferation; first write wins).
+  // one-time backup of the pre-Hundredfold original (no timestamped proliferation; first write wins).
   const backupPath = `${claudeJsonFile}.jinn-backup`;
   if (fs.existsSync(claudeJsonFile) && !fs.existsSync(backupPath)) {
     try { fs.copyFileSync(claudeJsonFile, backupPath, fs.constants.COPYFILE_EXCL); } catch { /* best effort */ }

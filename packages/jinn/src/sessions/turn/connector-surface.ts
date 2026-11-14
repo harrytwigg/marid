@@ -2,6 +2,7 @@ import { logger } from "../../shared/logger.js";
 import type { Connector, JinnConfig, Session, Target } from "../../shared/types.js";
 import type { GatewayEmit } from "../../shared/gateway-events.js";
 import type { TurnReceipt, TurnSurface } from "./types.js";
+import { LEGACY_PORTAL_NAME } from "../../shared/brand.js";
 
 const THINKING_STATUS = "is thinking...";
 const RUNNING_REACTION = "eyes";
@@ -67,7 +68,7 @@ export function createConnectorTurnSurface(options: ConnectorTurnSurfaceOptions)
       await react([], [RUNNING_REACTION, WAITING_REACTION]);
       options.emit?.("session:completed", {
         sessionId: receipt.session.id,
-        employee: receipt.session.employee || options.config.portal?.portalName || "Jinn",
+        employee: receipt.session.employee || options.config.portal?.portalName || LEGACY_PORTAL_NAME,
         title: receipt.session.title,
         result: receipt.result,
         error: receipt.error ?? deliveryError,

@@ -109,7 +109,7 @@ describe("requestRestartFromGateway", () => {
     );
   });
 
-  it("passes the current Jinn session id when available", async () => {
+  it("passes the current Hundredfold session id when available", async () => {
     process.env.JINN_SESSION_ID = "session-requesting-restart";
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "restarting" }), { status: 200 }));
 

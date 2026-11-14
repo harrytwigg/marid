@@ -42,7 +42,7 @@ import type { EngineResult, EngineRunOpts, ResolvedMcpConfig, StreamDelta } from
 const FAKE_V2 = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-opencode-v2.mjs");
 const TIMING_DEFAULTS = { ...SERVER_TURN_TIMING };
 const MODEL = "opencode-go/deepseek-v4.1-flash";
-const STOPPED_NOTICE_START = "[Jinn] Before this message, the user stopped the request(s) below before they were finished:";
+const STOPPED_NOTICE_START = "[Hundredfold] Before this message, the user stopped the request(s) below before they were finished:";
 
 const TOOLSET_MCP: ResolvedMcpConfig = {
   mcpServers: { jinn: { command: "node", args: ["/opt/jinn/mcp.js", "--jinn-toolset", "board-walk"], env: { JINN_SESSION_ID: "sess-1" } } },
@@ -214,7 +214,7 @@ describe("an OpenCode 2 server in the pool", { timeout: 30_000 }, () => {
 });
 
 describe("OpencodeEngine turns on an OpenCode 2 server", { timeout: 30_000 }, () => {
-  it("creates the session without the question tool and posts the prompt as a queued, Jinn-marked input", async () => {
+  it("creates the session without the question tool and posts the prompt as a queued, Hundredfold-marked input", async () => {
     const h = harness();
     const { result } = await streamed(h);
     const log = await logOf(h);
@@ -701,7 +701,7 @@ describe("requests the operator cancelled in the session", { timeout: 30_000 }, 
     return id;
   }
 
-  it("is told to the model in the next Jinn turn's prompt, which then carries a notice", async () => {
+  it("is told to the model in the next Hundredfold turn's prompt, which then carries a notice", async () => {
     const h = harness();
     const id = await operatorCancelled(h, "HANG while I think");
     const { result } = await streamed(h, { resumeSessionId: id, prompt: "what next" });

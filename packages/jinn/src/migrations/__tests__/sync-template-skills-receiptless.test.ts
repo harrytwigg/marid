@@ -20,7 +20,7 @@ function write(file: string, content: string) {
   fs.writeFileSync(file, content)
 }
 
-function fixture(portalName = "Jinn") {
+function fixture(portalName = "Hundredfold") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-receiptless-retirement-"))
   roots.push(root)
   const home = path.join(root, "home")

@@ -149,7 +149,7 @@ export function realCodexHome(codexHomesBaseDir: string = CODEX_HOMES_DIR): stri
 }
 
 // Codex normally lets all concurrent CLI processes share these directories in
-// ~/.codex. Keeping private copies inside every Jinn session home only multiplies
+// ~/.codex. Keeping private copies inside every Hundredfold session home only multiplies
 // remote plugin checkouts and caches; none of them is required to locate or
 // resume a session thread. Session rollouts and SQLite state remain private.
 const SHARED_CODEX_HOME_DIRS = ["plugins", "cache", "skills", "vendor_imports", ".tmp"] as const;
@@ -851,7 +851,7 @@ export class CodexEngine implements InterruptibleEngine {
         const missingThreadId = missingRolloutThreadId(errMsg, opts.resumeSessionId);
         if (missingThreadId) {
           logger.warn(
-            `Codex resume failed: no rollout found for thread ${missingThreadId}; starting a fresh thread for Jinn session ${sessionId}`,
+            `Codex resume failed: no rollout found for thread ${missingThreadId}; starting a fresh thread for Hundredfold session ${sessionId}`,
           );
           this.run({ ...opts, resumeSessionId: undefined }).then(resolve, reject);
           return;

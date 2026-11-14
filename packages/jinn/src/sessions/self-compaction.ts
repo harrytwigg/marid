@@ -35,7 +35,7 @@ export function selfCompactionClaimedAt(session: { transportMeta?: Record<string
   return typeof at === "number" && Number.isFinite(at) ? at : undefined;
 }
 
-/** Engines whose native compaction Jinn can drive. */
+/** Engines whose native compaction Hundredfold can drive. */
 export const SELF_COMPACTION_ENGINES = ["claude", "opencode"] as const;
 
 export interface CompactionHandoff {
@@ -105,7 +105,7 @@ export function parseCompactionHandoff(body: unknown): HandoffParse {
   return { ok: true, handoff: handoff as CompactionHandoff };
 }
 
-/** Why Jinn cannot drive an engine's native compaction, or undefined when it
+/** Why Hundredfold cannot drive an engine's native compaction, or undefined when it
  *  can. One rule for both ways in: a session's compact_session and an
  *  operator's `/compact` (see `compact-command.ts`). */
 export type CompactionUnsupported = "opencode-run-mode" | "no-native-compaction";
@@ -123,9 +123,9 @@ export function selfCompactionRefusal(engine: string, opencodeMode: string | und
     case undefined:
       return undefined;
     case "opencode-run-mode":
-      return "opencode sessions can only compact in server mode (engines.opencode.mode: server); this instance runs `opencode run`, which has no compaction Jinn can call";
+      return "opencode sessions can only compact in server mode (engines.opencode.mode: server); this instance runs `opencode run`, which has no compaction Hundredfold can call";
     case "no-native-compaction":
-      return `the ${engine} engine has no native compaction Jinn can drive; self-compaction supports ${SELF_COMPACTION_ENGINES.join(" and ")}`;
+      return `the ${engine} engine has no native compaction Hundredfold can drive; self-compaction supports ${SELF_COMPACTION_ENGINES.join(" and ")}`;
   }
 }
 

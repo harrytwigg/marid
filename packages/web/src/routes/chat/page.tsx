@@ -100,7 +100,7 @@ function ChatPage() {
   // (`/?session=<id>`) — selecting is a navigation, so browser back/forward
   // walk the session trail, refresh restores the thread, and links carry it.
   // A thread drill-in's history entry also carries its origin (the back chip);
-  // Jinn ships in chrome-less Tauri shells, so every drill-in needs an in-app
+  // Hundredfold ships in chrome-less Tauri shells, so every drill-in needs an in-app
   // way back while browser back keeps working on the web.
   const location = useLocation()
   const navigate = useNavigate()

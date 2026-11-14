@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /**
  * FR-020b: every local spawn of a session takes its cwd from `spawnCwd`
  * (sessions/session-cwd.ts), so a scoped session never starts, retries or attaches in
- * the Jinn home. This fails on any hard-coded `cwd: JINN_HOME` outside the allow-list
+ * the Hundredfold home. This fails on any hard-coded `cwd: JINN_HOME` outside the allow-list
  * below, so a new spawn site cannot bring the old behaviour back unnoticed.
  */
 

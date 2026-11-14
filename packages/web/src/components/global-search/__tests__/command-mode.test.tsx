@@ -24,7 +24,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, api: { ...actual.api, ...mocks } }
 })
 vi.mock("@/routes/settings-provider", () => ({
-  useSettings: () => ({ settings: { portalName: "Jinn", employeeOverrides: {} } }),
+  useSettings: () => ({ settings: { portalName: "Hundredfold", employeeOverrides: {} } }),
 }))
 
 import type { WorkItemStatusWire } from "@/lib/api"

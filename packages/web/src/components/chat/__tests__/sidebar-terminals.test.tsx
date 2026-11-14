@@ -47,7 +47,7 @@ vi.mock('@/lib/api-terminals', () => ({
 }))
 
 vi.mock('@/routes/settings-provider', () => ({
-  useSettings: () => ({ settings: { portalName: 'Jinn', employeeOverrides: {} } }),
+  useSettings: () => ({ settings: { portalName: 'Hundredfold', employeeOverrides: {} } }),
 }))
 
 vi.mock('@/components/ui/context-menu', () => ({

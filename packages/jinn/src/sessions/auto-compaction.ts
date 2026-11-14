@@ -20,7 +20,7 @@ import { compactionUnsupported, type CompactionUnsupported } from "./self-compac
  * compaction waits for the model's context ceiling: opencode's fires at
  * `limit.context − maxOutput` (~968k on a 1M model) and ignores its
  * `compaction.reserved` unless the provider declares `limit.input`. So the
- * budget (`maxContextTokens`) is Jinn's: at or above it, the turn compacts
+ * budget (`maxContextTokens`) is Hundredfold's: at or above it, the turn compacts
  * first whatever the cache.
  *
  * Off unless `engines.<engine>.autoCompact.enabled` is true. Only claude and
@@ -41,9 +41,9 @@ function isoMs(value: unknown): number | undefined {
 
 /**
  * When this session's engine conversation last touched the provider, which is
- * when its prompt cache was last refreshed: the latest turn Jinn settled on it
+ * when its prompt cache was last refreshed: the latest turn Hundredfold settled on it
  * (`lastSyncedAt`, written with every receipt that files the engine session)
- * or, for Claude, the latest turn typed straight into its terminal that Jinn
+ * or, for Claude, the latest turn typed straight into its terminal that Hundredfold
  * has synced. Undefined when nothing says — never guessed as cold.
  *
  * `lastActivity` cannot answer this: the turn being decided has already

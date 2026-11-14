@@ -26,7 +26,7 @@ vi.mock("@/routes/settings-provider", () => ({
   useSettings: () => ({
     settings: {
       companyName: "Acme Labs",
-      portalName: "Jinn",
+      portalName: "Hundredfold",
       operatorName: "Operator",
       language: "English",
       accentColor: "#3B82F6",

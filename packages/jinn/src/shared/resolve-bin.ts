@@ -5,7 +5,7 @@ import os from "node:os";
 /**
  * Dynamic engine-binary resolution.
  *
- * Jinn ships to other users' machines, so engine binaries must NEVER be
+ * Hundredfold ships to other users' machines, so engine binaries must NEVER be
  * hardcoded to an absolute path. We resolve a binary the same way a shell
  * would (search PATH), plus a few common install dirs that aren't always on
  * a daemon's PATH (notably `~/.local/bin`, where the Antigravity installer

@@ -21,8 +21,8 @@ const RESERVED_KEY_ENV: ReadonlySet<string> = new Set([
   // Common process variables: an account's key must never overwrite or stand in for one.
   "PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH",
 ]);
-/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, `MARID_*`), opencode's server and switch families (`OPENCODE_SERVER_*`, `OPENCODE_DISABLE_*`) and the loader, XDG and ssh families. */
-const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "OPENCODE_SERVER_", "OPENCODE_DISABLE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const;
+/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, and `HUNDREDFOLD_*` and `MARID_*`, the names it is moving to and the one it had), opencode's server and switch families (`OPENCODE_SERVER_*`, `OPENCODE_DISABLE_*`) and the loader, XDG and ssh families. */
+const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "HUNDREDFOLD_", "OPENCODE_SERVER_", "OPENCODE_DISABLE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const;
 /** The standard key variables of the common providers. Other tools, and opencode's own providers, read these; a key moved out of the gateway's environment for an account would be withheld from them. */
 const PROVIDER_KEY_ENV: ReadonlySet<string> = new Set([
   "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",

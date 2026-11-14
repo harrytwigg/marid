@@ -113,7 +113,7 @@ function req(method: string, pathAndQuery: string, headers: Record<string, strin
 }
 
 const apiCtx = {
-  getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {}, portal: { portalName: "Jinn" } }),
+  getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {}, portal: { portalName: "Hundredfold" } }),
   connectors: new Map(),
   startTime: Date.now(),
   emit: () => {},

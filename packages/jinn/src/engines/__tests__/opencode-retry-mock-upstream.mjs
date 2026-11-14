@@ -1,5 +1,5 @@
 /**
- * mock upstream for the Jinn-path retry e2e.
+ * mock upstream for the Hundredfold-path retry e2e.
  *
  * OpenAI-compatible, scripted so the first *main* request asks for a
  * side-effecting bash tool, the next is the transient 400, and the one after

@@ -8,16 +8,16 @@ import { sessionScopeDepartment, type SessionView } from "./session-scope.js";
 export { sessionScopeDepartment };
 
 /**
- * The working directory of a local session (FR-020b): the Jinn home for everyone, the
+ * The working directory of a local session (FR-020b): the Hundredfold home for everyone, the
  * department's stage directory for a session bound to a scoped department. Every place
  * that spawns a local session, or looks for its transcript, asks here, so a scoped
- * session never starts, retries or attaches in the Jinn home.
+ * session never starts, retries or attaches in the Hundredfold home.
  */
 
 /**
  * The cwd to spawn `session` in. For a scoped session this syncs the stage directory
  * first, so an edit a running session made to it is reverted by the next spawn, and it
- * throws rather than fall back to the Jinn home when the directory cannot be prepared.
+ * throws rather than fall back to the Hundredfold home when the directory cannot be prepared.
  * A session on a remote host runs in the host's copy, which the remote staging syncs:
  * the local directory is named, never prepared, so it cannot block that session.
  */

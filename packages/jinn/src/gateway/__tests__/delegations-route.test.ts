@@ -1160,12 +1160,12 @@ describe("spawn/delegate as the employee-hierarchy root", () => {
       const employee = await call("POST", "/api/sessions", { prompt: "ordinary", employee: "qa-emp" }, sessionHeaders(caller));
       expect(employee.status).toBe(201);
 
-      // "Jinn" is the virtual root here. It stays refused for the ordinary
+      // "Hundredfold" is the virtual root here. It stays refused for the ordinary
       // reason — no employee holds that name — and never through the root guard,
       // which would otherwise turn every unknown name into an authority error.
-      const portal = await call("POST", "/api/sessions", { prompt: "portal", employee: "Jinn" }, sessionHeaders(caller));
+      const portal = await call("POST", "/api/sessions", { prompt: "portal", employee: "Hundredfold" }, sessionHeaders(caller));
       expect(portal.status).toBe(400);
-      expect(String(portal.body.error)).toMatch(/unknown employee "Jinn"/);
+      expect(String(portal.body.error)).toMatch(/unknown employee "Hundredfold"/);
     } finally {
       fs.writeFileSync(rootYaml, saved);
     }

@@ -37,6 +37,13 @@ describe("fresh-install: template seeding + config guidance", () => {
     expect(source).toMatch(/deriveTodoIdPrefix/);
   });
 
+  it("starts a new instance under the product name, and writes a portal name unless it is the old default", () => {
+    const source = readFileSync(SETUP, "utf-8");
+    expect(source).toMatch(/companyName: "\$\{PRODUCT_NAME\}"/);
+    expect(source).toMatch(/: PRODUCT_NAME\);/);
+    expect(source).toMatch(/chosenName !== LEGACY_PORTAL_NAME/);
+  });
+
   it("guides engine authentication after the version probe", () => {
     expect(readFileSync(SETUP, "utf-8")).toMatch(/does NOT mean the engine is logged in/);
   });

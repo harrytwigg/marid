@@ -32,7 +32,7 @@ describe("isMcpCapableEngine (GRS-012b-0 capability set)", () => {
   it("returns false for undefined / unknown engines (safe default)", () => {
     expect(isMcpCapableEngine(undefined)).toBe(false);
     expect(isMcpCapableEngine("")).toBe(false);
-    expect(isMcpCapableEngine("gemini")).toBe(false); // Gemini CLI is not a Jinn engine
+    expect(isMcpCapableEngine("gemini")).toBe(false); // Gemini CLI is not a Hundredfold engine
   });
 
   it("MCP_CAPABLE_ENGINES is exactly the wired engines", () => {

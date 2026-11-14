@@ -222,7 +222,7 @@ describe("handleRateLimit — wait cancellation", () => {
     vi.mocked(computeRateLimitDeadlineMs).mockReturnValue(Date.now() + 60_000);
     getSessionMock.mockImplementation(() => makeSession({ status: "waiting" }));
     const retryEngine = { run: vi.fn(async () => ({ result: "retry", sessionId: "claude-thread-1" }) as EngineResult) };
-    const refresh = "## Jinn platform context refresh\n- Active model: opus";
+    const refresh = "## Hundredfold platform context refresh\n- Active model: opus";
     const opts = {
       ...makeOpts(vi.fn()),
       config: {

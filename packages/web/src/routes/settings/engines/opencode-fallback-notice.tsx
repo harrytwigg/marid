@@ -1,7 +1,7 @@
 import type { EngineRegistryEntry, InternalFallbackStatus } from "@/lib/engine-registry"
 
 /** Where the host migration is written down. */
-export const FALLBACK_MIGRATION_URL = "https://github.com/harrytwigg/marid/blob/main/docs/fallback-chains.md#migrating-a-host"
+export const FALLBACK_MIGRATION_URL = "https://github.com/hundredfoldhq/hundredfold/blob/main/docs/fallback-chains.md#migrating-a-host"
 
 /**
  * opencode on a host that still runs a fallback plugin would switch models by

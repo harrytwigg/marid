@@ -3,8 +3,8 @@ import path from "node:path";
 import { MOUNT_SENTINEL } from "./remote-target.js";
 
 /**
- * The Jinn instance-home half of the file-read policy: which files
- * inside ANY Jinn home a host can reach are never readable for ingestion, and
+ * The Hundredfold instance-home half of the file-read policy: which files
+ * inside ANY Hundredfold home a host can reach are never readable for ingestion, and
  * how a directory is recognized as such a home. Split from
  * shared/file-read-policy.ts, which composes it with the name- and
  * location-based refusals.
@@ -109,7 +109,7 @@ function exists(p: string): boolean {
 }
 
 /**
- * Whether `dir` is a Jinn instance home. A host can reach several besides the
+ * Whether `dir` is a Hundredfold instance home. A host can reach several besides the
  * session's own: on a remote build host, the gateway's home through the mount,
  * and every sibling session stage under the stage root (whose `gateway.json` and
  * `tmp/` are real files, not links into the mount). The mount and every stage —
@@ -169,7 +169,7 @@ export function protectedEntryCandidates(resolved: string, p: path.PlatformPath 
 }
 
 /**
- * The protected entry `resolved` falls inside, under ANY Jinn home it sits in —
+ * The protected entry `resolved` falls inside, under ANY Hundredfold home it sits in —
  * judged at its own path and, when it lies inside a symlinked protected entry of
  * the session's home, at the name it has there. Name matching runs first, so
  * the filesystem is only consulted to confirm a candidate home.

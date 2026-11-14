@@ -74,7 +74,7 @@ describe("finding a transcript", () => {
     expect(findTranscriptOfSession({ employee: "transcript-dev" }, ID)).toBe(real);
   });
 
-  it("an unscoped session's transcript is still the Jinn home's", () => {
+  it("an unscoped session's transcript is still the Hundredfold home's", () => {
     const decoy = transcript("/aaa-decoy-project");
     const real = transcript(JINN_HOME);
     expect(real).not.toBe(decoy);

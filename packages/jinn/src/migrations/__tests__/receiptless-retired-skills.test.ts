@@ -7,7 +7,7 @@ import { matchesReceiptlessRetiredSkill, receiptlessRetiredSkillNames } from "..
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const fixture = (relative: string) => fs.readFileSync(path.join(here, "fixtures", relative), "utf8")
-const inputs = { portalName: "Jinn", portalSlug: "jinn" }
+const inputs = { portalName: "Hundredfold", portalSlug: "jinn" }
 const roots: string[] = []
 
 afterEach(() => {
@@ -87,7 +87,7 @@ describe("receiptless retirement: existing single-version skills", () => {
   })
 
   it("still rejects a modified migrate skill", () => {
-    const dir = installSkill("migrate", `${migrate.replaceAll("{{portalName}}", "Jinn")}\nextra\n`)
+    const dir = installSkill("migrate", `${migrate.replaceAll("{{portalName}}", "Hundredfold")}\nextra\n`)
     expect(matchesReceiptlessRetiredSkill(dir, "migrate", inputs)).toBe(false)
   })
 

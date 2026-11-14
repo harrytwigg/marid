@@ -183,7 +183,7 @@ function validateTurnDetection(turn: unknown): string[] {
 export function loadConfig(): JinnConfig {
   if (!fs.existsSync(CONFIG_PATH)) {
     throw new Error(
-      `Jinn config not found at ${CONFIG_PATH}. Run "jinn setup" first.`
+      `Hundredfold config not found at ${CONFIG_PATH}. Run "jinn setup" first.`
     );
   }
   const raw = fs.readFileSync(CONFIG_PATH, "utf-8");

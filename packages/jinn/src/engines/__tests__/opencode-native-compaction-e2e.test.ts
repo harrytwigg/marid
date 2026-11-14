@@ -11,7 +11,7 @@ import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import type { EngineResult, EngineRunOpts } from "../../shared/types.js";
 
 /**
- * e2e: where opencode's OWN auto-compaction fires, through Jinn's
+ * e2e: where opencode's OWN auto-compaction fires, through Hundredfold's
  * OpencodeEngine in server mode, against a mock provider that reports any
  * token count we like.
  *
@@ -156,7 +156,7 @@ async function runCase(c: Case): Promise<Observed> {
 
 const NO_INPUT_LIMIT = { context: 100_000, output: 4_000 };
 
-describe.skipIf(!RUN)("opencode native auto-compaction (Jinn server path)", { timeout: 240_000 }, () => {
+describe.skipIf(!RUN)("opencode native auto-compaction (Hundredfold server path)", { timeout: 240_000 }, () => {
   it("fires below the raw context ceiling once a turn crosses context - maxOutput, and the session carries on", async () => {
     const o = await runCase({ label: "over-native", firstPromptTokens: 97_000, limit: NO_INPUT_LIMIT });
     expect(o.turn1.error).toBeUndefined();

@@ -11,6 +11,7 @@ import {
   buildScopedRosterSummary,
 } from "./context/roster.js";
 import { departmentScopeSections, withDepartmentScope } from "./context/department-scope.js";
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 /**
  * Token budget strategy:
@@ -204,7 +205,7 @@ export function buildContext(opts: BuildContextOptions): string {
   const gatewayUrl = platformContext.gatewayBaseUrl;
 
   // Resolve personalized names from config
-  const portalName = opts.portalName || opts.config?.portal?.portalName || "Jinn";
+  const portalName = opts.portalName || opts.config?.portal?.portalName || LEGACY_PORTAL_NAME;
   const operatorName = opts.operatorName || opts.config?.portal?.operatorName;
   const language = opts.language || opts.config?.portal?.language || "English";
 

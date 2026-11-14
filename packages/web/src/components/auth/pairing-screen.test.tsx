@@ -44,9 +44,9 @@ describe("PairingScreen", () => {
       />,
     )
 
-    expect(screen.getByRole("button", { name: /pair with marid cli/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /pair with hundredfold cli/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /pair from web settings/i })).toBeTruthy()
-    expect(screen.getByText(/run this on the computer where marid is running/i)).toBeTruthy()
+    expect(screen.getByText(/run this on the computer where hundredfold is running/i)).toBeTruthy()
     expect(screen.getByText(/jinn pair/i)).toBeTruthy()
 
     fireEvent.click(screen.getByRole("button", { name: /pair from web settings/i }))
@@ -89,14 +89,14 @@ describe("PairingScreen", () => {
       />,
     )
 
-    const cliHeader = screen.getByRole("button", { name: /pair with marid cli/i })
+    const cliHeader = screen.getByRole("button", { name: /pair with hundredfold cli/i })
     expect(cliHeader.getAttribute("aria-expanded")).toBe("true")
-    expect(screen.getByText(/run this on the computer where marid is running/i)).toBeTruthy()
+    expect(screen.getByText(/run this on the computer where hundredfold is running/i)).toBeTruthy()
 
     fireEvent.click(cliHeader)
 
     expect(cliHeader.getAttribute("aria-expanded")).toBe("false")
-    expect(screen.queryByText(/run this on the computer where marid is running/i)).toBeNull()
+    expect(screen.queryByText(/run this on the computer where hundredfold is running/i)).toBeNull()
   })
 
   it("keeps fallback setup-token pairing explicit and ephemeral", () => {

@@ -12,7 +12,7 @@ import { appendWorkItemEvent } from './store.js';
  * An automated re-dispatch — a workflow re-arm, a status-driven trigger, any
  * future auto-pickup — asks these four predicates before it takes the Todo's
  * claim. Each answers the same question from a different fact: would another
- * attempt right now actually help? Jinn has had repeat-worker storms, and every
+ * attempt right now actually help? Hundredfold has had repeat-worker storms, and every
  * one of them was a re-dispatch a cheap read could have refused.
  *
  * A hold is audited and takes NO claim, so a Todo the guards parked is still

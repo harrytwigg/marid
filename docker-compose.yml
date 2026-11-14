@@ -37,7 +37,7 @@ services:
       # its OAuth token in place, so this volume cannot be read-only.
       - jinn-claude:/home/node/.claude
 
-      # Writable Codex device-auth state; keep it separate from Jinn and Claude state.
+      # Writable Codex device-auth state; keep it separate from Hundredfold and Claude state.
       - jinn-codex:/home/node/.codex
 
       # Project mounts. THIS LIST IS THE BLAST RADIUS. At least one is required, or
