@@ -5,6 +5,7 @@
 //   node scripts/rename-codename.mjs              report what would change, by area
 //   node scripts/rename-codename.mjs --apply      rewrite the files, then move the paths
 //   node scripts/rename-codename.mjs --check      exit 1 if anything would still change: the CI guard
+//   --residue                                     list every file that still carries an old name, and why it may
 //   --list                                        with --report or --check, print each file
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -19,6 +20,7 @@ const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
 const check = args.has("--check");
 const list = args.has("--list");
+const residue = args.has("--residue");
 
 /** This script and its rules name the old words to say what they are: they are the one place that may. */
 const SELF = /^scripts\/(?:rename-codename\.mjs|rename-codename\/|__tests__\/rename-codename\.test\.mjs)/;
@@ -44,6 +46,35 @@ for (const file of everything) {
   const result = renameText(buffer.toString("utf8"), KEEP_PATTERNS);
   if (result.changed) rewrites.push([file, result.text]);
   if (result.left.length > 0) kept.push([file, result.left.length]);
+}
+
+if (residue) {
+  const why = (file) => {
+    if (/^packages\/[^/]+\/template\/migrations\//.test(file)) return "released migration bundle (merge base, byte-identical)";
+    if (/^(?:packages\/[^/]+\/)?(?:LICENSE|NOTICE)$/.test(file)) return "licence attribution";
+    if (/^packages\/shell\/src-tauri\/gen\//.test(file)) return "generated app project (bundle id and crate names kept)";
+    if (file === "CHANGELOG.md") return "released history";
+    if (/\/__tests__\/|\.test\.[cm]?[jt]sx?$/.test(file)) return "test of how an old install is read";
+    if (/^docs\/|\.md$/.test(file)) return "documentation of the old names or the attribution";
+    return "code that reads the old names";
+  };
+  const counts = {};
+  for (const file of everything) {
+    const full = path.join(root, file);
+    if (!fs.lstatSync(full).isFile()) continue;
+    const buffer = fs.readFileSync(full);
+    if (isBinary(buffer)) continue;
+    const n = buffer.toString("utf8").split("\n").filter((line) => /jinn|marid/i.test(line)).length;
+    if (n > 0 || /jinn|marid/i.test(file)) {
+      const key = why(file);
+      counts[key] ??= { files: 0, lines: 0 };
+      counts[key].files += 1;
+      counts[key].lines += n;
+      if (list) console.log(`${n}\t${key}\t${file}`);
+    }
+  }
+  console.log(JSON.stringify(counts, null, 2));
+  process.exit(0);
 }
 
 const area = (file) => file.split("/").slice(0, 2).join("/");
