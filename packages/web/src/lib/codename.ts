@@ -10,7 +10,7 @@ import { CODENAME } from "@jinn/codename"
 export { CODENAME }
 
 /** The name every browser that used an earlier build holds its state under. Never changes. */
-export const LEGACY_CODENAME = "jinn"
+export const LEGACY_CODENAME = "jinn" // rename:keep
 
 /** Whether this build's name differs from the legacy one, so legacy spellings exist. */
 export function isRenamed(codename: string = CODENAME): boolean {

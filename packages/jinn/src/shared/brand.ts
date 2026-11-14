@@ -16,7 +16,7 @@ export function productBanner(version: string): string {
 const VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?";
 const BARE_VERSION = new RegExp(`^(${VERSION_PATTERN})$`);
 /** What builds from before the rename called the product in their banner. A host still on one prints it. */
-const LEGACY_PRODUCT_NAME = "Marid";
+const LEGACY_PRODUCT_NAME = "Marid"; // rename:keep
 const BANNER_VERSION = new RegExp(`^(?:${PRODUCT_NAME}|${LEGACY_PRODUCT_NAME}) (${VERSION_PATTERN}) \\(built on Jinn\\)$`);
 
 /** Inverse of `productBanner`: the version out of a `jinn --version` line.

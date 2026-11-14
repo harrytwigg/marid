@@ -21,7 +21,7 @@ import { CODENAME } from "./codename-constant.js";
 export { CODENAME };
 
 /** The name every install made before a rename carries. Never changes. */
-export const LEGACY_CODENAME = "jinn";
+export const LEGACY_CODENAME = "jinn"; // rename:keep
 
 export interface Names {
   /** The lower-case form: `jinn`, a header segment, an instance name. */

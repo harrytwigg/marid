@@ -11,7 +11,7 @@ import path from "node:path";
 import os from "node:os";
 
 const CODENAME = "__CODENAME__";
-const LEGACY_CODENAME = "jinn";
+const LEGACY_CODENAME = "jinn"; // rename:keep
 const env = (suffix) => process.env[`${CODENAME.toUpperCase()}_${suffix}`] ?? process.env[`${LEGACY_CODENAME.toUpperCase()}_${suffix}`];
 
 const sessionId = process.argv[2];

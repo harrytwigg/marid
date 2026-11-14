@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type ChatPin, type PinsResponse } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
-const LEGACY_PIN_STORAGE_KEY = 'jinn-pinned-sessions'
+const LEGACY_PIN_STORAGE_KEY = 'jinn-pinned-sessions' // rename:keep
 
 function readLegacyPins(): { present: boolean; keys: string[] } {
   if (typeof localStorage === 'undefined') return { present: false, keys: [] }

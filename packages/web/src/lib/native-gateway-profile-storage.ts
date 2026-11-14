@@ -1,7 +1,7 @@
 import type { GatewayProfile } from "./gateway-transport"
 
 const STORAGE_KEY = "jinn.native.gateway-profiles.v1"
-const LEGACY_ACTIVE_ORIGIN_KEY = "jinn.native.active-origin"
+const LEGACY_ACTIVE_ORIGIN_KEY = "jinn.native.active-origin" // rename:keep
 
 export interface NativeGatewayProfile extends GatewayProfile {
   name: string
