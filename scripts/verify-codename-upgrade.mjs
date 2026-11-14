@@ -3,9 +3,9 @@
 //
 //   node scripts/verify-codename-upgrade.mjs --old <repo> --new <repo> --codename <word> --port <port> [--keep]
 //
-// `--old` is a checkout built with the codename every existing install carries. `--new` is a checkout built
-// with `--codename` in the package's `src/shared/codename-constant.ts` (and in nothing else): the same source,
-// one literal changed, built. The script:
+// `--old` is a built checkout of a release from before the rename, which every existing install was made with.
+// `--new` is a built checkout of this tree. `--codename` is the name the new build carries (it must differ from
+// the old one). The script:
 //
 //   1. makes a real-shaped instance with the OLD build, in a scratch host home: a sessions database with a
 //      conversation-bearing session and one bound to a scoped department, an attachment, a department stage
@@ -101,7 +101,9 @@ async function checkSessions(state, newStage) {
 function checkTheRest(state) {
   // A relay an older gateway staged names its home, its header and its field the old way; a blocked command
   // (exit 2, the policy's own answer) proves the new gateway read all three.
-  const relay = path.join(oldRepo, pkgDir(oldRepo), "assets/hook-relay.mjs");
+  // The old build's asset, rendered the way its gateway renders it when it stages one.
+  const relay = path.join(host, "old-hook-relay.mjs");
+  fs.writeFileSync(relay, fs.readFileSync(path.join(oldRepo, pkgDir(oldRepo), "assets/hook-relay.mjs"), "utf8").replaceAll("__CODENAME__", OLD));
   const payload = { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm -rf ~" } };
   const blocked = spawnSync(NODE, [relay, state.plain], { input: JSON.stringify(payload), encoding: "utf8", env: { PATH: baseEnv().PATH, HOME: host, [`${OLDUP}_HOME`]: oldHome } });
   check("a hook relay staged by the old build is still obeyed by the new gateway", blocked.status === 2 && /destructive/i.test(blocked.stderr), `exit ${blocked.status}: ${blocked.stderr.trim().slice(0, 80)}`);

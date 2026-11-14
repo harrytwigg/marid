@@ -2,6 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { logger } from "../shared/logger.js";
+import { parseJsonc } from "../shared/jsonc.js";
+
+export { parseJsonc };
 
 /**
  * Finding an opencode internal model fallback on a host.
@@ -44,41 +47,6 @@ export interface DetectOptions {
   home?: string;
   /** Project directories whose `.opencode/` and `opencode.json` opencode also reads. */
   projectDirs?: string[];
-}
-
-/** The index just past the string literal that starts at `start`. */
-function endOfString(text: string, start: number): number {
-  let j = start + 1;
-  while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
-  return j + 1;
-}
-
-/** The index just past the comment that starts at `start`, or `start` when none does. */
-function endOfComment(text: string, start: number): number {
-  if (text[start] !== "/") return start;
-  if (text[start + 1] === "/") {
-    const eol = text.indexOf("\n", start);
-    return eol < 0 ? text.length : eol;
-  }
-  if (text[start + 1] === "*") {
-    const close = text.indexOf("*/", start + 2);
-    return close < 0 ? text.length : close + 2;
-  }
-  return start;
-}
-
-/** JSON with `//` and block comments and trailing commas, as `opencode.jsonc` allows. */
-export function parseJsonc(raw: string): unknown {
-  const text = raw.replace(/^\uFEFF/, "");
-  let out = "";
-  let i = 0;
-  while (i < text.length) {
-    const next = text[i] === '"' ? endOfString(text, i) : endOfComment(text, i);
-    if (text[i] === '"') out += text.slice(i, next);
-    else out += next === i ? text[i] : " ";
-    i = next === i ? i + 1 : next;
-  }
-  return JSON.parse(out.replace(/,(\s*[\]}])/g, "$1"));
 }
 
 function readJson(file: string): unknown {

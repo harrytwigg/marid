@@ -3,11 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import type { Command } from "commander";
 import yaml from "js-yaml";
-import { CONFIG_PATH } from "../shared/paths.js";
-import { saveConfigAtomic } from "../shared/config.js";
-import { parseJsonc } from "../engines/opencode-internal-fallback.js";
+import { parseJsonc } from "../shared/jsonc.js";
 import type { FallbackLink } from "../shared/fallback-chain-wire.js";
-import { migrateOpencodeFallback, type OpencodeEmployee, type OpencodeMigration } from "./opencode-fallback-migration.js";
+import type { OpencodeEmployee, OpencodeMigration } from "./opencode-fallback-migration.js";
 
 /** `hundredfold fallback migrate-opencode [--file <path>] [--write]` (docs/fallback-chains.md, "Migrating a host"). */
 
@@ -87,7 +85,7 @@ export type WriteOutcome = { written: true } | { written: false; reason: string 
  * Refuses when `engines.opencode.fallback` is already set, when the chain is
  * empty or invalid, and when the config does not exist.
  */
-export function writeEngineChain(chain: FallbackLink[], configPath = CONFIG_PATH, save: (config: unknown) => void = saveConfigAtomic): WriteOutcome {
+export function writeEngineChain(chain: FallbackLink[], configPath: string, save: (config: unknown) => void): WriteOutcome {
   if (chain.length === 0) return { written: false, reason: "there is no engine-wide chain to write" };
   if (!fs.existsSync(configPath)) return { written: false, reason: `no config at ${configPath}; run \`hundredfold setup\` first` };
   const config = (yaml.load(fs.readFileSync(configPath, "utf-8")) ?? {}) as Record<string, any>;
@@ -120,9 +118,13 @@ export interface MigrateOptions {
 }
 
 /** What `--write` makes of a migration: written, or why not. */
-function writeOutcome(migration: OpencodeMigration): WriteOutcome {
-  if (migration.problems.length) return { written: false, reason: "the chain has problems (above)" };
-  return writeEngineChain(migration.engineChain);
+async function writeOutcome(migration: OpencodeMigration): Promise<{ outcome: WriteOutcome; configPath?: string }> {
+  if (migration.problems.length) return { outcome: { written: false, reason: "the chain has problems (above)" } };
+  // Loaded here, not at the top: these evaluate the home's paths when they load, and the command line
+  // moves an older install's home before it runs a command, so nothing may read the path earlier.
+  const { CONFIG_PATH } = await import("../shared/paths.js");
+  const { saveConfigAtomic } = await import("../shared/config.js");
+  return { outcome: writeEngineChain(migration.engineChain, CONFIG_PATH, saveConfigAtomic), configPath: CONFIG_PATH };
 }
 
 function missingSettings(candidates: string[], file: string | undefined): string {
@@ -139,12 +141,14 @@ export async function runMigrateOpencode(options: MigrateOptions = {}, out: (lin
     process.exitCode = 1;
     return;
   }
+  // Loaded here: the migration pulls in the model catalogues, which evaluate the home's paths as they load.
+  const { migrateOpencodeFallback } = await import("./opencode-fallback-migration.js");
   const migration = migrateOpencodeFallback(found.settings, await orgOf());
   out(renderMigration(migration, found.file));
   let failed = migration.problems.length > 0;
   if (options.write) {
-    const outcome = writeOutcome(migration);
-    out(outcome.written ? `\nWrote engines.opencode.fallback to ${CONFIG_PATH}.` : `\nNot written: ${outcome.reason}.`);
+    const { outcome, configPath } = await writeOutcome(migration);
+    out(outcome.written ? `\nWrote engines.opencode.fallback to ${configPath}.` : `\nNot written: ${outcome.reason}.`);
     failed = failed || !outcome.written;
   }
   if (failed) process.exitCode = 1;
