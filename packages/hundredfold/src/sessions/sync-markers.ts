@@ -9,6 +9,9 @@
 /** Set when an engine reports it no longer has the conversation; its value is the engine that lost it. */
 export const LOST_CONVERSATION_META_KEY = "lostConversationEngine";
 
+/** `meta.kind` of the chat notice that says an engine conversation could not be resumed. It is for the operator: the replacement conversation is told so in its own prompt, so the notice is left out of the transcript it is handed. */
+export const LOST_CONVERSATION_NOTICE_KIND = "lost-conversation";
+
 /** The catch-up mode of a pending engine-sync marker: `"pointer"`, or absent for the pasted transcript. */
 export const SYNC_MODE_META_KEY = "engineSyncMode";
 
