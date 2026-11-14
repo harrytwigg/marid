@@ -72,7 +72,7 @@ const BINARY_EXTENSIONS = new Set([
   ".wasm", ".so", ".dylib", ".node", ".a", ".o", ".exe", ".dll", ".class", ".keystore", ".jks", ".car", ".nib", ".sqlite", ".db",
 ]);
 
-export function isBinary(buffer, relPath) {
+export function isBinary(_buffer, relPath) {
   return BINARY_EXTENSIONS.has(path.extname(relPath).toLowerCase());
 }
 

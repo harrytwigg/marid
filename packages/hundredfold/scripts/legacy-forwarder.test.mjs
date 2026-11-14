@@ -15,7 +15,7 @@ const current = path.join(packageRoot, "dist/bin/hundredfold.js");
 function run(file, ...args) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "forwarder-"));
   try {
-    return spawnSync(process.execPath, [file, ...args], { encoding: "utf8", env: { PATH: process.env.PATH, HOME: home, HUNDREDFOLD_HOME: path.join(home, ".hundredfold-test") } });
+    return spawnSync(process.execPath, [file, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { PATH: process.env.PATH, HOME: home, HUNDREDFOLD_HOME: path.join(home, ".hundredfold-test") } });
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

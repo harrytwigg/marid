@@ -41,6 +41,7 @@ import {
   OLD,
   OLDUP,
   exists,
+  fail,
   host,
   instance,
   until,

@@ -45,6 +45,15 @@ for (const file of everything) {
   if (result.left.length > 0) kept.push([file, result.left.length]);
 }
 
+/** How many lines of a tracked text file carry an old name, or undefined for what is not a text file. */
+function oldNameLines(file) {
+  const full = path.join(root, file);
+  if (!fs.lstatSync(full).isFile()) return undefined;
+  const buffer = fs.readFileSync(full);
+  if (isBinary(buffer, file)) return undefined;
+  return buffer.toString("utf8").split("\n").filter((line) => hasOldName(line)).length;
+}
+
 if (residue) {
   const why = (file) => {
     if (/^packages\/hundredfold\/template\/migrations\//.test(file)) return "released migration bundle (merge base, byte-identical)";
@@ -57,18 +66,13 @@ if (residue) {
   };
   const counts = {};
   for (const file of everything) {
-    const full = path.join(root, file);
-    if (!fs.lstatSync(full).isFile()) continue;
-    const buffer = fs.readFileSync(full);
-    if (isBinary(buffer, file)) continue;
-    const n = buffer.toString("utf8").split("\n").filter((line) => hasOldName(line)).length;
-    if (n > 0 || hasOldName(file)) {
-      const key = why(file);
-      counts[key] ??= { files: 0, lines: 0 };
-      counts[key].files += 1;
-      counts[key].lines += n;
-      if (list) console.log(`${n}\t${key}\t${file}`);
-    }
+    const n = oldNameLines(file);
+    if (n === undefined || (n === 0 && !hasOldName(file))) continue;
+    const key = why(file);
+    counts[key] ??= { files: 0, lines: 0 };
+    counts[key].files += 1;
+    counts[key].lines += n;
+    if (list) console.log(`${n}\t${key}\t${file}`);
   }
   console.log(JSON.stringify(counts, null, 2));
   process.exit(0);

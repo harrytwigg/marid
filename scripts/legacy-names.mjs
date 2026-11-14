@@ -32,6 +32,23 @@ export const legacyHomeName = `.${LEGACY.codename}`
 /** The old title-case name: macOS and Windows data directories use it. */
 export const legacyTitle = LEGACY.codename[0].toUpperCase() + LEGACY.codename.slice(1)
 
+/**
+ * `export` lines giving each variable that carries an old prefix the current prefix, unless the current one is set.
+ * Only names a shell can export are kept: an `eval` of anything else would stop the container from starting.
+ */
+export function adoptLines(env) {
+  const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
+  const lines = []
+  for (const prefix of LEGACY.envPrefixes) {
+    const adopted = Object.entries(env).filter(([key, value]) => key.startsWith(`${prefix}_`) && value !== undefined && /^[A-Z0-9_]+$/.test(key))
+    for (const [key, value] of adopted) {
+      const current = `HUNDREDFOLD_${key.slice(prefix.length + 1)}`
+      if (env[current] === undefined) lines.push(`export ${current}=${quote(value)}`)
+    }
+  }
+  return lines
+}
+
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv[2] === "unset") {
     const keys = process.argv.slice(3).flatMap((suffix) => legacyEnv(suffix))
@@ -39,16 +56,6 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   } else if (process.argv[2] === "home-name") {
     console.log(legacyHomeName)
   } else if (process.argv[2] === "adopt") {
-    // `export` lines giving each variable that carries an old prefix the current prefix, unless the current one is set.
-    const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
-    for (const prefix of LEGACY.envPrefixes) {
-      for (const [key, value] of Object.entries(process.env)) {
-        if (!key.startsWith(`${prefix}_`) || value === undefined) continue
-        // Only names a shell can export: `eval` of anything else would stop the container from starting.
-        if (!/^[A-Z0-9_]+$/.test(key)) continue
-        const current = `HUNDREDFOLD_${key.slice(prefix.length + 1)}`
-        if (process.env[current] === undefined) console.log(`export ${current}=${quote(value)}`)
-      }
-    }
+    for (const line of adoptLines(process.env)) console.log(line)
   }
 }

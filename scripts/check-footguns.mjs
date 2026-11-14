@@ -20,6 +20,7 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
+import { renameText } from "./rename-codename/engine.mjs"
 import { RAW_BACKDROP_BLUR } from "./footguns/backdrop-blur.mjs"
 import { findLeaks, loadPrivateTerms, PRIVATE_TERMS_DEFAULT } from "./footguns/privacy-leak.mjs"
 import { REMOVED_UI_LIBRARY } from "./footguns/removed-ui-libraries.mjs"
@@ -84,6 +85,8 @@ const RULES = [
       "packages/hundredfold/src/shared/home.ts",
       "packages/hundredfold/src/shared/paths.ts",
       "packages/hundredfold/src/instances/directory.ts",
+      // Names the real home in order to refuse to run a test against it.
+      "packages/hundredfold/vitest.test-home.ts",
     ]),
     scans: (relPath) => underPackages(relPath) && extensionIn(relPath, CODE_EXTENSIONS),
     // Both halves must be on one line: the home call, and a literal that names a
@@ -272,35 +275,43 @@ function trackedFiles() {
  */
 function addedLines(diff) {
   const byFile = new Map()
-  let lines = null
-  let inHeader = false
-  let lineNumber = 0
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      lines = null
-      inHeader = true
-      continue
-    }
-    if (inHeader) {
-      if (!line.startsWith("+++ ")) continue
-      inHeader = false
-      const target = line.slice(4)
-      if (target === "/dev/null") continue
-      lines = new Set()
-      byFile.set(target.replace(/^b\//, ""), lines)
-      continue
-    }
-    if (line.startsWith("@@")) {
-      const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(line)
-      if (hunk) lineNumber = Number(hunk[1])
-      continue
-    }
-    if (lines && line.startsWith("+")) {
-      lines.add(lineNumber)
-      lineNumber += 1
-    }
-  }
+  const state = { lines: null, inHeader: false, lineNumber: 0, removed: new Set() }
+  for (const line of diff.split("\n")) readDiffLine(line, state, byFile)
   return byFile
+}
+
+function readDiffLine(line, state, byFile) {
+  if (line.startsWith("diff --git ") || state.inHeader) {
+    readHeaderLine(line, state, byFile)
+    return
+  }
+  if (line.startsWith("@@")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(line)
+    if (hunk) state.lineNumber = Number(hunk[1])
+    state.removed = new Set()
+    return
+  }
+  if (!state.lines) return
+  if (line.startsWith("-")) state.removed.add(renameText(line.slice(1), []).text)
+  if (!line.startsWith("+")) return
+  // A line that only changed because the product's name did was already there: it is not new.
+  if (!state.removed.has(line.slice(1))) state.lines.add(state.lineNumber)
+  state.lineNumber += 1
+}
+
+/** The header between `diff --git` and the first hunk: only its `+++` line says which file the hunks belong to. */
+function readHeaderLine(line, state, byFile) {
+  if (line.startsWith("diff --git ")) {
+    state.lines = null
+    state.inHeader = true
+    return
+  }
+  if (!line.startsWith("+++ ")) return
+  state.inHeader = false
+  const target = line.slice(4)
+  if (target === "/dev/null") return
+  state.lines = new Set()
+  byFile.set(target.replace(/^b\//, ""), state.lines)
 }
 
 function diffTarget(mode, ref) {

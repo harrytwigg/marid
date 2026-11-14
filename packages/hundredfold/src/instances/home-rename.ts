@@ -144,14 +144,18 @@ export async function renameHomeIfNeeded(home: string, deps: HomeRenameDeps = {}
   if (readPendingMove(current)) return resumeMove(current, deps, names, log);
   // The old path, now a link to the moved home: use the real one, so one directory has one identity and one stage root.
   if (linkToCurrent(legacy, current)) return { kind: "nothing", home: current };
+  const settled = settleWithoutMoving(legacy, current, deps, names, log);
+  return settled ?? moveHome(legacy, current, deps, names, log);
+}
+
+/** What the state of the two paths already settles, or undefined when the home has to be moved. */
+function settleWithoutMoving(legacy: string, current: string, deps: HomeRenameDeps, names: Names, log: (message: string) => void): HomeRenameOutcome | undefined {
   const verdict = decide(legacy, current);
   if (verdict === "conflict") return { kind: "conflict", home: legacy, legacyHome: legacy, currentHome: current };
   if (verdict === "kept-link") return { kind: "kept", home: legacy, reason: `${legacy} is a link to somewhere else, so it was left alone` };
-  if (verdict === "nothing") {
-    if (kindOf(current) === "directory" && kindOf(legacy) === "absent") adoptOrphanedTranscripts(legacy, current, names, deps, log);
-    return { kind: "nothing", home: current };
-  }
-  return moveHome(legacy, current, deps, names, log);
+  if (verdict === "move") return undefined;
+  if (kindOf(current) === "directory" && kindOf(legacy) === "absent") adoptOrphanedTranscripts(legacy, current, names, deps, log);
+  return { kind: "nothing", home: current };
 }
 
 /** The departments an instance home has: one directory each under `org/`. */
@@ -201,12 +205,8 @@ async function moveHome(
   const homeDir = deps.homeDir ?? os.homedir();
   const now = (deps.now ?? (() => new Date()))();
   const kept = (reason: string): HomeRenameOutcome => ({ kind: "kept", home: legacy, reason });
-  if ((deps.isMountPoint ?? defaultIsMountPoint)(legacy)) return kept(`${legacy} is a mount point, so its path stays`);
-  if (gatewayRunningAt(legacy, deps, names)) {
-    return kept(`a gateway is running at ${legacy}: stop it, then start it again to move the home to ${current}`);
-  }
-  const unwritable = parentNotWritable(legacy);
-  if (unwritable) return kept(unwritable);
+  const reason = whyNotNow(legacy, current, deps, names);
+  if (reason) return kept(reason);
   let lock: Awaited<ReturnType<typeof acquireHomeLock>>;
   try {
     lock = await acquireHomeLock(path.join(path.dirname(legacy), `.${names.codename}-home-move.lock`), deps.lockTimeoutMs);
@@ -221,6 +221,13 @@ async function moveHome(
   } finally {
     lock.release();
   }
+}
+
+/** Why the home at `legacy` is not moved right now, or undefined when nothing stands in the way. */
+function whyNotNow(legacy: string, current: string, deps: HomeRenameDeps, names: Names): string | undefined {
+  if ((deps.isMountPoint ?? defaultIsMountPoint)(legacy)) return `${legacy} is a mount point, so its path stays`;
+  if (gatewayRunningAt(legacy, deps, names)) return `a gateway is running at ${legacy}: stop it, then start it again to move the home to ${current}`;
+  return parentNotWritable(legacy);
 }
 
 function gatewayRunningAt(home: string, deps: HomeRenameDeps, names: Names): boolean {
