@@ -16,21 +16,21 @@ import { metadataTag } from "./opencode-metadata-tag.js";
  *  - it stores a user message with a `compaction` part and an assistant
  *    message with `summary: true` and `mode: "compaction"` answering it, and
  *    the next prompt sees the summary in place of everything before it;
- *  - with `auto: false` it does not carry on by itself afterwards. Jinn's
+ *  - with `auto: false` it does not carry on by itself afterwards. Hundredfold's
  *    self-compaction queues its own resume turn, which must be the next thing
  *    the model reads.
  *
- * One more step is Jinn's. An opencode session receives Jinn's system prompt
+ * One more step is Hundredfold's. An opencode session receives Hundredfold's system prompt
  * (persona, operating manual, session context) as text at the top of its FIRST
  * user message — not as a system prompt — so compaction summarizes it away
  * with everything else. Straight after the summary the turn re-seeds it as a
  * synthetic user message posted with `noReply` (stored, not answered, hidden
- * from the TUI). Its Jinn metadata marks it as Jinn's own, so a later turn's
+ * from the TUI). Its Hundredfold metadata marks it as Hundredfold's own, so a later turn's
  * cancelled-request walk steps over it instead of reporting it as a request
  * the operator abandoned.
  *
  * The prompt's text after `/compact` is not used: summarize takes no
- * instructions. Jinn's self-compaction delivers the handoff as its own turn.
+ * instructions. Hundredfold's self-compaction delivers the handoff as its own turn.
  */
 
 /** Metadata on the re-seeded system prompt (see the header). */
@@ -41,7 +41,7 @@ export const COMPACTION_TIMEOUT_MS = 15 * 60_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export const RESEED_PREAMBLE =
-  "[Jinn] Your context was just compacted. These are the operating instructions and the session context "
+  "[Hundredfold] Your context was just compacted. These are the operating instructions and the session context "
   + "this session runs under; they still apply in full, and the summary above does not replace them.";
 
 type StoredMessage = { info?: Record<string, unknown>; parts?: Array<{ type?: unknown; text?: unknown }> };
@@ -147,7 +147,7 @@ export class OpencodeServerCompaction {
     return { sessionId, result: "", numTurns: 1, compaction, ...(summary ? { compactionSummary: summary } : {}), ...(cost ? { cost } : {}) };
   }
 
-  /** Put Jinn's system prompt back in front of the model (see the header).
+  /** Put Hundredfold's system prompt back in front of the model (see the header).
    *  Best effort: a failure costs the persona until the session's next fresh
    *  start, not the compaction, and is logged loudly. */
   private async reseed(route: string, model: { providerID: string; modelID: string }): Promise<void> {

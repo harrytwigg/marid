@@ -54,7 +54,7 @@ export function skillAllowListNote(workItemId: string): string {
 /**
  * Where the skills are read from in the prompt. A department-scoped employee runs in its
  * stage directory, where the allowed skills are copied to `.claude/skills/`; anyone else
- * reads `skills/` in the Jinn home. `employee` is who the session is for: a delegation
+ * reads `skills/` in the Hundredfold home. `employee` is who the session is for: a delegation
  * resolves its brief before the Todo changes hands, so the Todo's current assignee is only
  * the answer when nobody is named.
  */

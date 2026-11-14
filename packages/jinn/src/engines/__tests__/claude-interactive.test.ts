@@ -233,7 +233,7 @@ describe("TurnResolver", () => {
 });
 
 /**
- * Issue #102: `<suggestion>` is a Claude-engine "suggested next user turn". Jinn has no
+ * Issue #102: `<suggestion>` is a Claude-engine "suggested next user turn". Hundredfold has no
  * producer or consumer for it, so it lands in transcripts as assistant content that
  * other agents read as operator instruction. Strip the block, keep the remainder.
  */
@@ -300,11 +300,11 @@ describe("buildInteractiveArgs — system prompt + sentinel via CLI flag", () =>
     const args = buildInteractiveArgs({
       prompt: "hi",
       settingsPath: "/tmp/s.json",
-      appendSystemPrompt: `You are Jinn's COO.\n\n${MAIN_AGENT_SENTINEL}`,
+      appendSystemPrompt: `You are Hundredfold's COO.\n\n${MAIN_AGENT_SENTINEL}`,
     });
     const v = flagValue(args);
     expect(v).toBeDefined();
-    expect(v).toContain("You are Jinn's COO.");
+    expect(v).toContain("You are Hundredfold's COO.");
     expect(v).toContain(MAIN_AGENT_SENTINEL);
   });
 
@@ -332,7 +332,7 @@ describe("buildInteractiveArgs — system prompt + sentinel via CLI flag", () =>
   });
 
   it("can carry an explicit platform context refresh in the positional resume prompt", () => {
-    const refresh = "## Jinn platform context refresh\n- Active model: opus";
+    const refresh = "## Hundredfold platform context refresh\n- Active model: opus";
     const prompt = buildPromptWithPlatformContext({
       prompt: "spawn the child now",
       resumeSessionId: "original-claude-id",

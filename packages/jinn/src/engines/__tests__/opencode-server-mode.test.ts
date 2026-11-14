@@ -330,7 +330,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     expect(log[2]!.body).toEqual({
       // Posted under the turn's own message id, which scopes everything after.
       messageID: expect.stringMatching(/^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/),
-      // Marked as Jinn's, so a later turn can tell it from the operator's.
+      // Marked as Hundredfold's, so a later turn can tell it from the operator's.
       parts: [{ type: "text", text: "You are Ada.\n\n---\n\nbuild it", metadata: { jinn: "prompt" } }],
       model: { providerID: "opencode-go", modelID: "deepseek-v4.1-flash" },
       // `opencode run` offers no question tool; neither does a server turn.
@@ -474,7 +474,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     expect(result.result).toBe("answer:SLOW jinn work model=opencode-go/deepseek-v4.1-flash");
     // The operator's prompt runs on after the turn returned; let it finish.
     await waitFor(async () => Object.keys((await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body).length === 0);
-    // It asked for a permission; the Jinn turn left it alone.
+    // It asked for a permission; the Hundredfold turn left it alone.
     expect((await logOf(h)).some((e) => e.url.startsWith("/permission/"))).toBe(false);
     const stored = (await api<Array<{ info: { parentID?: string }; parts: Array<{ output?: string; state?: { output?: string } }> }>>(
       h.pool, "sess-1", `/session/${engineSession}/message`)).body;
@@ -499,7 +499,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
 
   it("a turn queued behind a running operator prompt sees that prompt's reply and permission, and takes neither", async () => {
     // The other order from the tests above: the operator's reply streams while
-    // the Jinn turn is already listening, so only the parentID check keeps it
+    // the Hundredfold turn is already listening, so only the parentID check keeps it
     // out (QA B1 on nothing failed with every reply classed as own).
     const h = harness();
     const first = await h.engine.run(runOpts({ prompt: "first" }));
@@ -525,7 +525,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
 
   /** The live smoke's steps 3d-4 up to the abort, in the order real opencode
    *  1.18.31 ran them when the smoke failed: the operator's prompt starts as the
-   *  Jinn turn's reply completes, blocks on a permission, and the operator
+   *  Hundredfold turn's reply completes, blocks on a permission, and the operator
    *  Esc-aborts it. Returns the opencode session and the operator's prompt id. */
   async function operatorAbortsAfterTurn(h: Harness): Promise<{ engineSession: string; operatorPrompt: string }> {
     const turn = h.engine.run(runOpts({ prompt: "SLOW jinn work" }));
@@ -557,7 +557,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
 
     const next = await h.engine.run(runOpts({ prompt: "EARLIER reply", resumeSessionId: engineSession }));
     // The notice goes first, synthetic (opencode's TUI does not show it as
-    // typed), quoting the request; the prompt itself follows, marked as Jinn's.
+    // typed), quoting the request; the prompt itself follows, marked as Hundredfold's.
     const parts = (await lastPost(h)).body.parts as Array<{ type: string; text: string; synthetic?: boolean; metadata?: unknown }>;
     expect(parts).toHaveLength(2);
     expect(parts[0]).toMatchObject({ type: "text", synthetic: true, metadata: { jinn: "cancelled-requests" } });
@@ -577,14 +577,14 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     expect((await lastPost(h)).body.parts).toEqual([{ type: "text", text: "third", metadata: { jinn: "prompt" } }]);
   });
 
-  it("no notice for a request that was not the operator's cancel — Jinn's own interrupted turn, or an operator prompt that was answered", async () => {
+  it("no notice for a request that was not the operator's cancel — Hundredfold's own interrupted turn, or an operator prompt that was answered", async () => {
     const h = harness();
     const first = await h.engine.run(runOpts({ prompt: "first" }));
     // The operator's prompt, answered.
     await h.pool.promptAsync("sess-1", first.sessionId, "OPERATOR question");
     await waitFor(async () => (await api<Stored>(h.pool, "sess-1", `/session/${first.sessionId}/message`)).body.length === 4);
     await waitFor(async () => Object.keys((await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body).length === 0);
-    // Jinn's own turn, interrupted by Jinn (a restart, a timeout, the chat's stop).
+    // Hundredfold's own turn, interrupted by Hundredfold (a restart, a timeout, the chat's stop).
     const hung = h.engine.run(runOpts({ prompt: "HANG jinn", resumeSessionId: first.sessionId }));
     await waitFor(async () => Object.keys((await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body).length === 1);
     h.engine.kill("sess-1", "Interrupted: gateway restart");
@@ -597,7 +597,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     expect((await lastPost(h)).body.parts).toEqual([{ type: "text", text: "after", metadata: { jinn: "prompt" } }]);
   });
 
-  it("a Jinn prompt queued behind the operator's is dropped by the operator's abort; the turn says so, and the next one names only the operator's request", async () => {
+  it("a Hundredfold prompt queued behind the operator's is dropped by the operator's abort; the turn says so, and the next one names only the operator's request", async () => {
     // Real opencode 1.18.32 does this too (gen139-evidence, probe `queued`):
     // the queued prompt stays in the history with no reply at all.
     const h = harness();
@@ -662,11 +662,11 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
   it("an error ending someone else's reply that was running before the turn subscribed is not the turn's", async () => {
     const h = harness();
     const first = await h.engine.run(runOpts({ prompt: "first" }));
-    // The operator's reply is running (and will fail) when the Jinn turn subscribes.
+    // The operator's reply is running (and will fail) when the Hundredfold turn subscribes.
     await h.pool.promptAsync("sess-1", first.sessionId, "OPERATOR SLOW FAIL");
     const stored = async () => (await api<Stored>(h.pool, "sess-1", `/session/${first.sessionId}/message`)).body;
     await waitFor(async () => (await stored()).length === 4);
-    // Jinn's own reply ends with no text, so the error would be all it reported.
+    // Hundredfold's own reply ends with no text, so the error would be all it reported.
     const result = await h.engine.run(runOpts({ prompt: "TOOLONLY jinn", resumeSessionId: first.sessionId }));
     expect(result.error).toMatch(/^the opencode server ended the turn without a final assistant response \(/);
     expect(result.numTurns).toBe(2);
@@ -711,7 +711,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     await h.pool.promptAsync("sess-1", first.sessionId, "OPERATOR quick");
     const stored = async () => (await api<Stored>(h.pool, "sess-1", `/session/${first.sessionId}/message`)).body;
     await waitFor(async () => (await stored()).length === 4 && Object.keys((await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body).length === 0);
-    expect((await logOf(h)).filter((e) => e.url.endsWith("/prompt_async"))).toHaveLength(2); // the operator's is the second; Jinn's is not sent yet
+    expect((await logOf(h)).filter((e) => e.url.endsWith("/prompt_async"))).toHaveLength(2); // the operator's is the second; Hundredfold's is not sent yet
     const result = await turn;
     expect(result.error).toBeUndefined();
     expect(result.result).toBe("answer:jinn second model=opencode-go/deepseek-v4.1-flash");
@@ -741,7 +741,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     expect(after.filter((m) => m.info.parentID === posted)).toHaveLength(2);
   });
 
-  describe("a Jinn turn the user stopped", () => {
+  describe("a Hundredfold turn the user stopped", () => {
     type StoredParts = Array<{ info: { id: string; role: string; parentID?: string; error?: { name: string } }; parts: Array<{ type: string; text?: string; metadata?: Record<string, unknown> }> }>;
     const storedOf = async (h: Harness, engineSession: string) => (await api<StoredParts>(h.pool, "sess-1", `/session/${engineSession}/message`)).body;
     const busy = async (h: Harness) => Object.keys((await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body).length > 0;
@@ -1150,7 +1150,7 @@ describe("OpencodeEngine in server mode — /compact", { timeout: 20_000 }, () =
   type Stored = { info: { role: string; summary?: boolean }; parts: Array<{ type: string; text?: string; synthetic?: boolean; metadata?: Record<string, unknown> }> };
   const logOf = async (h: Harness) => (await api<LogEntry[]>(h.pool, "sess-1", "/test/log")).body;
 
-  it("runs opencode's own compaction, then re-seeds the Jinn system prompt it summarized away", async () => {
+  it("runs opencode's own compaction, then re-seeds the Hundredfold system prompt it summarized away", async () => {
     const h = harness();
     const first = await h.engine.run(runOpts({ systemPrompt: "You are Ada." }));
     expect(first.error).toBeUndefined();
@@ -1182,7 +1182,7 @@ describe("OpencodeEngine in server mode — /compact", { timeout: 20_000 }, () =
     const stored = (await api<Stored[]>(h.pool, "sess-1", `${route}/message`)).body;
     const reseed = stored.at(-1)!;
     expect(reseed.info.role).toBe("user");
-    expect(reseed.parts[0]!.text).toMatch(/^\[Jinn\] Your context was just compacted\./);
+    expect(reseed.parts[0]!.text).toMatch(/^\[Hundredfold\] Your context was just compacted\./);
     expect(reseed.parts[0]!.text).toMatch(/You are Ada\.$/);
     expect(stored.some((m) => m.info.summary === true)).toBe(true);
   });
@@ -1191,8 +1191,8 @@ describe("OpencodeEngine in server mode — /compact", { timeout: 20_000 }, () =
     const h = harness();
     const first = await h.engine.run(runOpts({ systemPrompt: "You are Ada." }));
     await h.engine.run(runOpts({ prompt: "/compact", resumeSessionId: first.sessionId, systemPrompt: "You are Ada." }));
-    // An abort after the re-seed is what would make an unanswered, non-Jinn
-    // message read as dropped by it (the cancellation walk): Jinn cuts a turn short.
+    // An abort after the re-seed is what would make an unanswered, non-Hundredfold
+    // message read as dropped by it (the cancellation walk): Hundredfold cuts a turn short.
     const hung = h.engine.run(runOpts({ prompt: "HANG", resumeSessionId: first.sessionId }));
     await waitFor(async () => (await logOf(h)).filter((e) => e.url.endsWith("/prompt_async")).length === 2);
     await new Promise((r) => setTimeout(r, 100)); // picked up: running, so the abort lands
@@ -1629,7 +1629,7 @@ describe("OpencodeInteractiveEngine", { timeout: 20_000 }, () => {
     w.sub.unsubscribe();
   });
 
-  it("holds composer text while a Jinn turn runs in the session, and sends it when the turn ends", async () => {
+  it("holds composer text while a Hundredfold turn runs in the session, and sends it when the turn ends", async () => {
     const h = harness();
     const first = await h.engine.run(runOpts({ resolvedMcp: MCP_A }));
     const v = view(h);

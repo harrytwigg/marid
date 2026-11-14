@@ -11,7 +11,7 @@ import type { JinnConfig } from "../../shared/types.js";
  * server mode — a real `opencode serve`, a mock provider that reports whatever
  * token count it is told to. The session's first turn reads 50k tokens, past a
  * 40k budget but far under opencode's own threshold (100000 − 4000), so the
- * compaction in front of the second turn can only be Jinn's: opencode's
+ * compaction in front of the second turn can only be Hundredfold's: opencode's
  * summarize with `auto: false`, after which the message runs on the summary.
  *
  * Skipped unless OPENCODE_COMPACTION_E2E=1 (it spawns a real opencode server;
@@ -127,7 +127,7 @@ describe.skipIf(!RUN)("the context budget against a real opencode server", { tim
     expect(last).toContain("Say goodbye in one word.");
     expect(last).not.toContain("Say hello in one word.");
 
-    // Jinn's compaction (auto: false), not opencode's own.
+    // Hundredfold's compaction (auto: false), not opencode's own.
     const thread = reg.getSession(sessionId)!.engineSessions!.opencode!.id!;
     const server = pool.get(sessionId)!;
     const stored = await (await fetch(`${server.apiUrl}/session/${thread}/message`, {

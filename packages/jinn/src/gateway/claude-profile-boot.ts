@@ -26,7 +26,7 @@ import { orgRegistry } from "./org-registry.js";
  * protects.
  */
 export function bootClaudeProfiles(getConfig: () => JinnConfig): void {
-  // Seed trust for the Jinn project dir so interactive Claude doesn't prompt.
+  // Seed trust for the Hundredfold project dir so interactive Claude doesn't prompt.
   try {
     seedTrust(claudeJsonPath(), JINN_HOME);
   } catch (err) {

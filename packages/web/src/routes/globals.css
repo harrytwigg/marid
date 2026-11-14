@@ -654,7 +654,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ============================================
-   Jinn shell — the large title's collapse
+   Hundredfold shell — the large title's collapse
    Scroll-driven, so the header owes nothing to a scroll listener: the timeline
    IS the scrollport (`scroll(nearest block)`), which is why the large title has
    to live inside it. The range comes from the title's own measured height,

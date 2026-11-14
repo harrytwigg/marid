@@ -65,7 +65,7 @@ function fail(res, status, body) {
 function answer(req, res, body) {
   const messages = body.messages || [];
   const users = messages.filter((m) => m.role === "user");
-  // Directives count in the prompt itself, not in the notes Jinn puts in front
+  // Directives count in the prompt itself, not in the notes Hundredfold puts in front
   // of it (a stopped request's notice quotes that request's directive).
   const lastUser = JSON.stringify(users.at(-1)?.content ?? "").split("---").at(-1);
   const last = messages.at(-1);

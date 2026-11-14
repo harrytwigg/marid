@@ -108,7 +108,7 @@ case "${1:-}" in
         -i*|--instance|--instance=*)
           # Program-level (bin/jinn.ts), and JINN_HOME above already came from
           # JINN_INSTANCE — so this would boot on a home the entrypoint never prepared.
-          echo "jinn-entrypoint: secondary Jinn instances are not supported in this container. Run each instance in its own container with dedicated jinn-home and jinn-claude volumes and a separately published port." >&2
+          echo "jinn-entrypoint: secondary Hundredfold instances are not supported in this container. Run each instance in its own container with dedicated jinn-home and jinn-claude volumes and a separately published port." >&2
           exit 64
           ;;
         -p*|--port|--port=*)

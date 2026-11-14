@@ -168,7 +168,7 @@ function markdown(manifest, rationale) {
     "",
     "This file is generated. The manifest is authoritative; each record below appears exactly once.",
     "Each record names only inputs that ship in this bundle or exist in the instance: the base payload under `files/base/` is the generic template before this release, the target payload under `files/target/` is the template after it, both relative to this bundle directory, and the current user-owned file is the instance path shown on the record.",
-    "Materialize those payloads before comparing: in `.md`, `.yaml` and `.yml` files replace `{{portalName}}` with the instance's `portal.portalName` from `config.yaml` (default `Jinn`) and `{{portalSlug}}` with that name lowercased with runs of whitespace replaced by single hyphens, and leave every other file byte-for-byte unchanged.",
+    "Materialize those payloads before comparing: in `.md`, `.yaml` and `.yml` files replace `{{portalName}}` with the instance's `portal.portalName` from `config.yaml` (default `Jinn`) and `{{portalSlug}}` with that name lowercased with runs of whitespace replaced by single hyphens, and leave every other file byte-for-byte unchanged.", // rename:keep
     "Then three-way merge the materialized base, the current instance file and the materialized target; preserve user customizations, record unresolved placeholders as conflicts, and never delete user content without explicit review and a snapshot.",
     "Merge Markdown by heading. When the target adds a section whose heading the instance file already has, reconcile it into that existing section and record a conflict where the wording differs; never append a second section with the same heading.",
     "",

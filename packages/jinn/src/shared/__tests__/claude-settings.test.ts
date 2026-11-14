@@ -65,7 +65,7 @@ describe("claude-settings", () => {
     const projA = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "proj-")));
     const projB = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "proj-")));
     seedTrust(claudeJson, projA);
-    expect(fs.readFileSync(backup, "utf-8")).toBe(original); // pristine pre-Jinn copy
+    expect(fs.readFileSync(backup, "utf-8")).toBe(original); // pristine pre-Hundredfold copy
     seedTrust(claudeJson, projB); // second modification must NOT overwrite the backup
     expect(fs.readFileSync(backup, "utf-8")).toBe(original);
   });

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Throwaway Marid gateway for visual verification.
+# Throwaway Hundredfold gateway for visual verification.
 #
 #   jinn-sandbox.sh create  <instance> --port <p> [--build] [--seed]
 #   jinn-sandbox.sh start   <instance>
@@ -16,7 +16,7 @@
 #     at start and stop against the port the sandbox's config.yaml actually declares;
 #   - the operator's instance home (~/.jinn) and its gateway are never read, signalled or removed;
 #   - every JINN_* variable that names an instance, a port or a gateway session is dropped before
-#     anything runs, so a caller inside a live Jinn session cannot aim this at its own gateway;
+#     anything runs, so a caller inside a live Hundredfold session cannot aim this at its own gateway;
 #   - destroy only removes a directory this script created (it carries a marker file).
 #
 # Writing a verify script for a new phase (copy scripts/verify-chat-grid-drop.sh):
@@ -48,11 +48,11 @@ unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_
 
 SCRIPT_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${JINN_REPO:-$SCRIPT_REPO}"
-[[ -f "$REPO/packages/jinn/package.json" ]] || die "JINN_REPO is not a Marid checkout: $REPO"
+[[ -f "$REPO/packages/jinn/package.json" ]] || die "JINN_REPO is not a Hundredfold checkout: $REPO"
 REPO="$(cd "$REPO" && pwd -P)"
 JINN_BIN="$REPO/packages/jinn/dist/bin/jinn.js"
 
-# NODE_BIN runs this script's own helpers. CLI_NODE_BIN runs the Marid CLI and can be swapped
+# NODE_BIN runs this script's own helpers. CLI_NODE_BIN runs the Hundredfold CLI and can be swapped
 # (JINN_SANDBOX_NODE_BIN) so a test can observe the environment the CLI is given.
 NODE_BIN="$(command -v node || true)"
 [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]] || die "node is required"
@@ -98,7 +98,7 @@ check_port() {
 
 port_listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t >/dev/null 2>&1; }
 
-# Everything the Marid CLI runs sees the sandbox and nothing else. JINN_PORT is deliberately not
+# Everything the Hundredfold CLI runs sees the sandbox and nothing else. JINN_PORT is deliberately not
 # set: the sandbox's own config.yaml binds the gateway, and the verify scripts assert that.
 #
 # CLAUDE_CONFIG_DIR names an empty profile directory inside the sandbox. On macOS the Keychain

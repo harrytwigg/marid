@@ -23,7 +23,7 @@ import { RESEED_PREAMBLE } from "./opencode-server-compaction.js";
 import { sameModelRef, unsupportedServerFlags, variantOf, type V2ModelRef } from "./opencode-variant.js";
 
 /**
- * One Jinn turn on an OpenCode 2 server (`/api/*`), the counterpart of
+ * One Hundredfold turn on an OpenCode 2 server (`/api/*`), the counterpart of
  * `OpencodeServerTurn` for 1.x. The steps are the same:
  *
  *   1. subscribe to `/api/event` and wait for `server.connected`;
@@ -241,7 +241,7 @@ export class OpencodeV2ServerTurn {
   }
 
   /**
-   * The user stopped the turn: note it on the session, for the next Jinn turn
+   * The user stopped the turn: note it on the session, for the next Hundredfold turn
    * to tell the model (2.x cannot mark the delivered prompt itself). It survives
    * a gateway restart, and `run()` does not return until it is written. Best
    * effort: without it the next turn is simply not told.

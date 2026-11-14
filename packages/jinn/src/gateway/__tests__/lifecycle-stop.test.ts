@@ -224,7 +224,7 @@ describe("stop / stopAndWait PID-file race", { timeout: LSOF_PROBE_TIMEOUT_MS },
     await waitForExit(child);
   });
 
-  itNeedsProcessEnvReads("stop() refuses a foreign Jinn owner with a clear remediation error", async () => {
+  itNeedsProcessEnvReads("stop() refuses a foreign Hundredfold owner with a clear remediation error", async () => {
     const port = await freePort();
     const foreignHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-foreign-home-"));
     tempDirs.push(foreignHome);
@@ -433,15 +433,15 @@ describe("shouldSignalPidFileProcess", () => {
     }
   });
 
-  it("prefers the Jinn daemon when a proxy and the gateway both listen on the configured port", () => {
+  it("prefers the Hundredfold daemon when a proxy and the gateway both listen on the configured port", () => {
     expect(selectPortOwnerPid([27_247, 43_201], (pid) => pid === 43_201)).toBe(43_201);
   });
 
-  it("does not trust a PID file when port ownership lookup is unknown and the command is not Jinn", () => {
+  it("does not trust a PID file when port ownership lookup is unknown and the command is not Hundredfold", () => {
     expect(shouldSignalPidFileProcess(123, { status: "unknown" }, false)).toBe(false);
   });
 
-  it("trusts a PID file with unknown port ownership only when the command looks like Jinn", () => {
+  it("trusts a PID file with unknown port ownership only when the command looks like Hundredfold", () => {
     expect(shouldSignalPidFileProcess(123, { status: "unknown" }, true)).toBe(true);
   });
 

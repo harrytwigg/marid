@@ -1,4 +1,5 @@
 import path from "node:path"
+import { LEGACY_PORTAL_NAME } from "./brand.js"
 
 export interface TemplateMaterializationInputs {
   portalName: string
@@ -20,7 +21,7 @@ export function isTemplateMaterializationPath(filePath: string): boolean {
 export function deriveTemplateMaterializationInputs(
   config: TemplateMaterializationConfig | null | undefined,
 ): TemplateMaterializationInputs {
-  const portalName = config?.portal?.portalName || "Jinn"
+  const portalName = config?.portal?.portalName || LEGACY_PORTAL_NAME
   return {
     portalName,
     portalSlug: portalName.toLowerCase().replace(/\s+/g, "-"),

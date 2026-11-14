@@ -5,6 +5,7 @@ import { CONFIG_PATH } from "../shared/paths.js";
 import { DepartmentBoundaryError, isNonOpenDepartment } from "./department-scope.js";
 import { deriveTodoIdPrefix, resolveTodoIdPrefix } from "./id.js";
 import type { WorkItem } from "./store.js";
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 /**
  * Per-department Todo ID prefixes (Todos v2 slice 1). A department's prefix is
@@ -142,7 +143,7 @@ export function reconcileDepartmentRegistry(db: DatabaseType): number {
     .all() as string[];
   if (missing.length === 0) return 0;
   const portal = fs.existsSync(CONFIG_PATH) ? loadConfig().portal : undefined;
-  const companyPrefix = resolveTodoIdPrefix(portal?.companyName ?? "Jinn", portal?.companyPrefix);
+  const companyPrefix = resolveTodoIdPrefix(portal?.companyName ?? LEGACY_PORTAL_NAME, portal?.companyPrefix);
   for (const slug of missing) {
     resolveDepartmentPrefix(db, slug, companyPrefix);
   }

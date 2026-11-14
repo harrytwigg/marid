@@ -303,7 +303,7 @@ export function resolveSyncPrompt(
 
   const recentMessages = getMessages(session.id).filter((message) => message.timestamp >= sync.sinceMs);
   const intro = sync.engineSwitch
-    ? "We switched engines in this Jinn session. Sync your context with this transcript (most recent last), then respond to the current message."
+    ? "We switched engines in this Hundredfold session. Sync your context with this transcript (most recent last), then respond to the current message."
     : sync.accountSwap
       ? "We temporarily ran this session on another Claude account due to a usage limit. Sync your context with this transcript (most recent last), then respond to the current message."
       : "We temporarily ran this session on another engine due to a Claude usage limit. Sync your context with this transcript (most recent last), then respond to the current message.";
@@ -335,7 +335,7 @@ export function resolveLostConversationPrompt(
   const lines = transcriptLines(getMessages(session.id).filter((message) => !isOpenTurnMessage(message, pending)), unseen);
   const carriedInterruptedPrompts = unseen.length > 0;
   if (lines.length === 0) return { promptToRun: withInterruptedPrompts(prompt, unseen), carriedInterruptedPrompts };
-  const intro = "The conversation this Jinn session was running could not be resumed, so this is a new one. "
+  const intro = "The conversation this Hundredfold session was running could not be resumed, so this is a new one. "
     + "Sync your context with this transcript of the session (most recent last), then respond to the current message.";
   const current = carriedInterruptedPrompts ? withInterruptedPrompts(prompt, unseen) : prompt.trim() ? `CURRENT MESSAGE:\n${prompt}` : "";
   return { promptToRun: [intro, lines.join("\n\n"), current].filter(Boolean).join("\n\n"), carriedInterruptedPrompts };

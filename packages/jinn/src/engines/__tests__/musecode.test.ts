@@ -58,9 +58,9 @@ describe("a fresh turn", () => {
   });
 
   it("prefixes the system prompt on a fresh session only, as opencode does", async () => {
-    const fresh = await ctx.engine.run(opts({ prompt: "do it", systemPrompt: "You are Marid." }));
-    expect(fresh.result).toBe("fake muse: You are Marid.\n\n---\n\ndo it");
-    const resumed = await ctx.engine.run(opts({ prompt: "again", systemPrompt: "You are Marid.", resumeSessionId: fresh.sessionId }));
+    const fresh = await ctx.engine.run(opts({ prompt: "do it", systemPrompt: "You are Hundredfold." }));
+    expect(fresh.result).toBe("fake muse: You are Hundredfold.\n\n---\n\ndo it");
+    const resumed = await ctx.engine.run(opts({ prompt: "again", systemPrompt: "You are Hundredfold.", resumeSessionId: fresh.sessionId }));
     expect(resumed.result).toBe("fake muse: again");
   });
 

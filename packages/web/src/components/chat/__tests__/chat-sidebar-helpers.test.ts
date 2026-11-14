@@ -88,7 +88,7 @@ describe('chat sidebar search row identity', () => {
         'jinn',
         {
           name: 'jinn',
-          displayName: 'Jinn Dev',
+          displayName: 'Hundredfold Dev',
           department: 'platform',
           rank: 'employee' as const,
           engine: 'claude',
@@ -126,7 +126,7 @@ describe('chat sidebar search row identity', () => {
   it('resolves a real employee to its org display name', () => {
     expect(
       resolveRowIdentity({ source: 'web', sourceRef: 'web:2', employee: 'jinn' }, opts),
-    ).toEqual({ avatarName: 'jinn', displayName: 'Jinn Dev' })
+    ).toEqual({ avatarName: 'jinn', displayName: 'Hundredfold Dev' })
   })
 
   it('title-cases an employee with no org profile rather than crashing', () => {

@@ -52,7 +52,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     model: args.model,
     effortLevel: plan.effortLevel,
     cliFlags: input.employee?.cliFlags,
-    // `cwd` above is the gateway-side working directory (the Jinn home, or a scoped
+    // `cwd` above is the gateway-side working directory (the Hundredfold home, or a scoped
     // session's stage directory) and is meaningless on the remote host. The engine branches on `remoteHost` and
     // uses `remoteCwd` instead — passing both is what lets one code path serve
     // a local and a remote employee.

@@ -1,5 +1,5 @@
 /**
- * Jinn Talk — streamed audio player (Phase 2 real loop).
+ * Hundredfold Talk — streamed audio player (Phase 2 real loop).
  *
  * Plays base64-encoded audio chunks (a complete WAV per sentence from the local
  * Kokoro TTS backend) IN ARRIVAL ORDER with low latency, and exposes an

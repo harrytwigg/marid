@@ -45,7 +45,7 @@ export async function declineUserInput(client: MspClient, params: Record<string,
       commandId: uuidv7(),
       sessionId: params.sessionId,
       userInputId: params.userInputId,
-      reason: "Marid runs this session unattended",
+      reason: "Hundredfold runs this session unattended",
     });
   } catch (err) {
     logger.warn(`Muse Code userInput/cancel failed: ${err instanceof Error ? err.message : err}`);

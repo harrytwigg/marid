@@ -1,9 +1,9 @@
-<h1 align="center">Marid</h1>
+<h1 align="center">Hundredfold</h1>
 
 <p align="center"><b>Run your AI agents as a company.</b></p>
 
 <p align="center">
-  Marid turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes, opencode, Muse Code - into a persistent AI company:
+  Hundredfold turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes, opencode, Muse Code - into a persistent AI company:
   named employees and a durable Todo ledger,
   all operated from a chat and web dashboard.<br/>
   It doesn't replace your agents. <b>It gives them an org to work in.</b>
@@ -16,36 +16,36 @@
   <img src="https://img.shields.io/badge/status-beta-1E7A8C" alt="status: beta" />
 </p>
 
-> **You bring the engines. Marid runs the company.**
+> **You bring the engines. Hundredfold runs the company.**
 
 ## Built on Jinn
 
-Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, the web dashboard and the engine adapters. Marid keeps tracking upstream and adds features on top of it - see [What Marid adds](#what-marid-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
+Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, the web dashboard and the engine adapters. Hundredfold has its own name and release line and adds features on top of it - see [What Hundredfold adds](#what-hundredfold-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
 
-Internally the codename stays "Jinn": the `jinn` command, the `jinn-cli` package name, `~/.jinn` and the `JINN_*` variables are unchanged, so an existing Jinn install keeps working and upstream fixes merge cleanly.
+Internally the codename stays "Jinn": the `jinn` command, the `jinn-cli` package name, `~/.jinn` and the `JINN_*` variables are unchanged, so an existing Jinn install keeps working.
 
-> The `npm install -g jinn-cli` and Homebrew installs below ship the **upstream** Jinn package, not Marid. To run Marid's features, [build from this repository](#development).
+> The `npm install -g jinn-cli` and Homebrew installs below ship the **upstream** Jinn package, not Hundredfold. To run Hundredfold's features, [build from this repository](#development).
 
 ---
 
-## Why Marid?
+## Why Hundredfold?
 
-Agent CLIs are powerful alone. Marid gives them shared structure, ownership, and history.
+Agent CLIs are powerful alone. Hundredfold gives them shared structure, ownership, and history.
 
-- **🎼 Bus, not brain.** Marid conducts the agent CLIs on your `PATH` and adds no AI logic. Better engines make Marid better automatically.
+- **🎼 Bus, not brain.** Hundredfold conducts the agent CLIs on your `PATH` and adds no AI logic. Better engines make Hundredfold better automatically.
 - **🏢 A real org.** Define named employees, ranks, departments, and reporting lines in YAML. Your COO delegates through the hierarchy.
 - **📋 Durable work.** Todos preserve ownership and review beyond a session; the built-in MCP gives employees typed company tools.
 - **⏰ Work with receipts.** Cron, delegation, and callbacks keep running and leave structured activity in Chat.
 
-> Marid is **beta**. It works today and moves fast; read the upgrade notes when you bump versions.
+> Hundredfold is **beta**. It works today and moves fast; read the upgrade notes when you bump versions.
 
 ---
 
-## What Marid adds
+## What Hundredfold adds
 
-Everything in upstream Jinn still applies. On top of it, Marid adds:
+Everything in upstream Jinn still applies. On top of it, Hundredfold adds:
 
-| Area | Marid | Jinn upstream |
+| Area | Hundredfold | Jinn upstream |
 |---|---|---|
 | Workspace | VS Code-style split panes you can resize, per-pane tabs with preview and pinned tabs, drag a chat from the sidebar to split, mobile session tabs, teal theme | auto-arranged chat grid, single tab list, no resizing |
 | Terminal / CLI mode | type straight into the engine's TUI (stdin, paste, mouse, scroll); standalone shells on the gateway or a remote host in the sidebar | display-only CLI view with a composer and key bar |
@@ -56,7 +56,7 @@ Everything in upstream Jinn still applies. On top of it, Marid adds:
 | Sessions | self-compaction (`compact_session`), engine-aware `/compact`, opt-in auto-compaction of long sessions (cache-cold, or past a context budget), fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
 | Todos and dispatch | closed departments, a default board walk that releases gated Todos and starts work on spare capacity, with an Auto-Dispatch page, per-Todo auto-start opt-out, session tree per Todo | open departments, no board walk |
 
-The full feature-by-feature table, with what upstream already has, is in [`docs/marid-vs-jinn.md`](docs/marid-vs-jinn.md).
+The full feature-by-feature table, with what upstream already has, is in [`docs/hundredfold-vs-jinn.md`](docs/hundredfold-vs-jinn.md).
 
 ---
 
@@ -64,7 +64,7 @@ The full feature-by-feature table, with what upstream already has, is in [`docs/
 
 ### Native install
 
-> **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Marid orchestrates your engines and can't run a session without one.
+> **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Hundredfold orchestrates your engines and can't run a session without one.
 
 ```bash
 # 1. Install (upstream Jinn package - see "Built on Jinn" above)
@@ -91,15 +91,15 @@ brew install jinn
 jinn setup && jinn start
 ```
 
-> **`--version` ≠ signed in.** Marid drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
+> **`--version` ≠ signed in.** Hundredfold drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
 
 ### Docker
 
 Docker needs Docker Engine or Docker Desktop with Compose v2, but it does **not** need Node.js or an agent CLI installed on the host. The image includes Claude Code. Containerising bounds the engine's permission-free access to the directories you explicitly mount instead of your whole home directory:
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
-cd marid
+git clone https://github.com/hundredfoldhq/hundredfold.git
+cd hundredfold
 
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
 # Without one, /work is empty and the agents have nothing to work on.
@@ -110,7 +110,7 @@ docker compose exec jinn jinn pair  # prints a code for the browser
 
 Then open **[http://localhost:7777](http://localhost:7777)** and enter the code at the pairing prompt. The gateway binds `0.0.0.0` inside the container, so it requires auth, and your browser reaches it through Docker's NAT rather than loopback — which is why pairing replaces the automatic sign-in a host install gets.
 
-The compose image runs one instance. Additional instances need separate containers, dedicated Marid/Claude volumes and separately published ports. The writable blast radius includes those state volumes (OAuth, sessions and plugins), every writable project mount, and unrestricted network egress; see the Docker guide before mounting sensitive data.
+The compose image runs one instance. Additional instances need separate containers, dedicated Hundredfold/Claude volumes and separately published ports. The writable blast radius includes those state volumes (OAuth, sessions and plugins), every writable project mount, and unrestricted network egress; see the Docker guide before mounting sensitive data.
 
 The image ships the `claude` engine only. `codex`, `grok` and `hermes` are not included, and neither are `ffmpeg`/`whisper-cli` for speech-to-text — the same as a Homebrew or npm install, which leave those to you. See **[docs/docker.md](docs/docker.md)** for the mount model, what persists across upgrades, how to add speech-to-text, and what the isolation does and does not cover.
 
@@ -132,13 +132,13 @@ docker compose restart jinn       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading, the gateway re-syncs the skills Marid ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
+After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
 
 ---
 
 ## The company model
 
-Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from Marid's dashboard, in its Aero glass look.
+Hundredfold exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from Hundredfold's dashboard, in its Aero glass look.
 
 **Employees** are editable YAML roles with a name, department, rank, and engine. One employee can run several sessions; different roles can use different engines.
 
@@ -167,7 +167,7 @@ Marid exposes a small set of building blocks and handles the machinery underneat
 
 ## How it works
 
-Marid is a local gateway daemon plus a web dashboard. It dispatches work to installed engines, persists company state, runs automation, and serves the UI at `localhost:7777`.
+Hundredfold is a local gateway daemon plus a web dashboard. It dispatches work to installed engines, persists company state, runs automation, and serves the UI at `localhost:7777`.
 
 ```
                           +----------------+
@@ -193,7 +193,7 @@ Marid is a local gateway daemon plus a web dashboard. It dispatches work to inst
       +---------------+   +-----------+   +----------------+
 ```
 
-Claude runs in a real interactive terminal, so eligible turns bill against a Max/Pro subscription. Other engines use spawn-per-turn or streaming models. Marid discovers supported models from each CLI when available.
+Claude runs in a real interactive terminal, so eligible turns bill against a Max/Pro subscription. Other engines use spawn-per-turn or streaming models. Hundredfold discovers supported models from each CLI when available.
 
 ---
 
@@ -226,7 +226,7 @@ Reviewers choose TRUST, VERIFY, or THOROUGH oversight. Money, irreversible or pu
 
 ## Engines - bring your own
 
-Marid detects installed agent CLIs and lets each employee or session choose an engine. It discovers model catalogs when supported and otherwise uses labels from `config.yaml`.
+Hundredfold detects installed agent CLIs and lets each employee or session choose an engine. It discovers model catalogs when supported and otherwise uses labels from `config.yaml`.
 
 | Engine | What it is | Install | Modes | Effort |
 |--------|-----------|---------|-------|--------|
@@ -248,7 +248,7 @@ Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)
 <details>
 <summary><b>How the Claude engine runs on your subscription</b> (the PTY details)</summary>
 
-Marid drives the interactive `claude` binary through [node-pty](https://github.com/microsoft/node-pty), so eligible turns use Max/Pro subscription billing. Hooks mark turn boundaries, a loopback proxy streams model output, and transcript JSONL provides token usage.
+Hundredfold drives the interactive `claude` binary through [node-pty](https://github.com/microsoft/node-pty), so eligible turns use Max/Pro subscription billing. Hooks mark turn boundaries, a loopback proxy streams model output, and transcript JSONL provides token usage.
 
 The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and gateway restarts. Codex, Grok, and Pi spawn per turn; Hermes streams over ACP.
 
@@ -268,7 +268,7 @@ The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and 
 
 ## Configuration
 
-Marid reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
+Hundredfold reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
 
 ```yaml
 gateway:
@@ -323,13 +323,13 @@ logging:
 - **Plugins** live in `~/.jinn/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
 - **Behind a reverse proxy or tunnel**, the proxy must preserve `Host`, or pass the host the browser dialled in `X-Forwarded-Host`. The gateway's WebSockets (the live event stream `/ws`, plugin event sockets and terminals) refuse a browser whose `Origin` is not the gateway's own host, so a proxy that rewrites `Host` and forwards neither leaves the dashboard without live updates. A Cloudflare tunnel's default ingress preserves `Host`; don't set `httpHostHeader` on it. Sign-in rate limiting also needs to know the real client behind a proxy: set `gateway.trustedProxies` (and, for some tunnels, `gateway.clientIpHeader`); see [`docs/behind-a-proxy.md`](docs/behind-a-proxy.md).
 
-Everything is human-readable and yours to edit. After upgrading, the gateway re-syncs the skills Marid ships on boot (see the upgrade note under Quickstart). An edit to a shipped skill is replaced then, with the previous copy kept in a backup, so customize by writing a skill of your own. Skills you wrote, `CLAUDE.md`, `docs/`, `knowledge/` and `org/` are left as they are.
+Everything is human-readable and yours to edit. After upgrading, the gateway re-syncs the skills Hundredfold ships on boot (see the upgrade note under Quickstart). An edit to a shipped skill is replaced then, with the previous copy kept in a backup, so customize by writing a skill of your own. Skills you wrote, `CLAUDE.md`, `docs/`, `knowledge/` and `org/` are left as they are.
 
 ---
 
 ## Roadmap
 
-Marid is in active beta. Shipped recently in upstream Jinn:
+Hundredfold is in active beta. Shipped recently in upstream Jinn:
 
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
 - **Isolated workspaces** with separate homes, ports, access settings, and authentication.
@@ -347,11 +347,11 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Development
 
-Marid is a pnpm + turbo monorepo.
+Hundredfold is a pnpm + turbo monorepo.
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
-cd marid
+git clone https://github.com/hundredfoldhq/hundredfold.git
+cd hundredfold
 pnpm install
 pnpm setup   # one-time: builds all packages and creates ~/.jinn
 pnpm dev     # gateway (:7777) + Vite dev server (:5173) with hot reload
@@ -375,7 +375,7 @@ machine's cores minus 12, never fewer than 8 — and waits when the pool is empt
 neither applies and the run stays capped as it always has — turbo one task at a time, vitest two
 workers.
 
-> **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Marid orchestrates your engines and can't run a session without one.
+> **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Hundredfold orchestrates your engines and can't run a session without one.
 
 ```bash
 # 1. Install (upstream Jinn package - see "Built on Jinn" above)
@@ -402,15 +402,15 @@ brew install jinn
 jinn setup && jinn start
 ```
 
-> **`--version` ≠ signed in.** Marid drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
+> **`--version` ≠ signed in.** Hundredfold drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
 
 ### Docker
 
 Docker needs Docker Engine or Docker Desktop with Compose v2, but it does **not** need Node.js or an agent CLI installed on the host. The image includes Claude Code. Containerising bounds the engine's permission-free access to the directories you explicitly mount instead of your whole home directory:
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
-cd marid
+git clone https://github.com/hundredfoldhq/hundredfold.git
+cd hundredfold
 
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
 # Without one, /work is empty and the agents have nothing to work on.
@@ -421,7 +421,7 @@ docker compose exec jinn jinn pair  # prints a code for the browser
 
 Then open **[http://localhost:7777](http://localhost:7777)** and enter the code at the pairing prompt. The gateway binds `0.0.0.0` inside the container, so it requires auth, and your browser reaches it through Docker's NAT rather than loopback — which is why pairing replaces the automatic sign-in a host install gets.
 
-The compose image runs one instance. Additional instances need separate containers, dedicated Marid/Claude volumes and separately published ports. The writable blast radius includes those state volumes (OAuth, sessions and plugins), every writable project mount, and unrestricted network egress; see the Docker guide before mounting sensitive data.
+The compose image runs one instance. Additional instances need separate containers, dedicated Hundredfold/Claude volumes and separately published ports. The writable blast radius includes those state volumes (OAuth, sessions and plugins), every writable project mount, and unrestricted network egress; see the Docker guide before mounting sensitive data.
 
 The image ships the `claude` engine only. `codex`, `grok` and `hermes` are not included, and neither are `ffmpeg`/`whisper-cli` for speech-to-text — the same as a Homebrew or npm install, which leave those to you. See **[docs/docker.md](docs/docker.md)** for the mount model, what persists across upgrades, how to add speech-to-text, and what the isolation does and does not cover.
 
@@ -443,13 +443,13 @@ docker compose restart jinn       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading, the gateway re-syncs the skills Marid ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
+After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
 
 ---
 
 ## The company model
 
-Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from Marid's dashboard, in its Aero glass look.
+Hundredfold exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from Hundredfold's dashboard, in its Aero glass look.
 
 **Employees** are editable YAML roles with a name, department, rank, and engine. One employee can run several sessions; different roles can use different engines.
 
@@ -478,7 +478,7 @@ Marid exposes a small set of building blocks and handles the machinery underneat
 
 ## How it works
 
-Marid is a local gateway daemon plus a web dashboard. It dispatches work to installed engines, persists company state, runs automation, and serves the UI at `localhost:7777`.
+Hundredfold is a local gateway daemon plus a web dashboard. It dispatches work to installed engines, persists company state, runs automation, and serves the UI at `localhost:7777`.
 
 ```
                           +----------------+
@@ -504,7 +504,7 @@ Marid is a local gateway daemon plus a web dashboard. It dispatches work to inst
       +---------------+   +-----------+   +----------------+
 ```
 
-Claude runs in a real interactive terminal, so eligible turns bill against a Max/Pro subscription. Other engines use spawn-per-turn or streaming models. Marid discovers supported models from each CLI when available.
+Claude runs in a real interactive terminal, so eligible turns bill against a Max/Pro subscription. Other engines use spawn-per-turn or streaming models. Hundredfold discovers supported models from each CLI when available.
 
 ---
 
@@ -537,7 +537,7 @@ Reviewers choose TRUST, VERIFY, or THOROUGH oversight. Money, irreversible or pu
 
 ## Engines - bring your own
 
-Marid detects installed agent CLIs and lets each employee or session choose an engine. It discovers model catalogs when supported and otherwise uses labels from `config.yaml`.
+Hundredfold detects installed agent CLIs and lets each employee or session choose an engine. It discovers model catalogs when supported and otherwise uses labels from `config.yaml`.
 
 | Engine | What it is | Install | Modes | Effort |
 |--------|-----------|---------|-------|--------|
@@ -556,7 +556,7 @@ Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)
 <details>
 <summary><b>How the Claude engine runs on your subscription</b> (the PTY details)</summary>
 
-Marid drives the interactive `claude` binary through [node-pty](https://github.com/microsoft/node-pty), so eligible turns use Max/Pro subscription billing. Hooks mark turn boundaries, a loopback proxy streams model output, and transcript JSONL provides token usage.
+Hundredfold drives the interactive `claude` binary through [node-pty](https://github.com/microsoft/node-pty), so eligible turns use Max/Pro subscription billing. Hooks mark turn boundaries, a loopback proxy streams model output, and transcript JSONL provides token usage.
 
 The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and gateway restarts. Codex, Grok, and Pi spawn per turn; Hermes streams over ACP.
 
@@ -576,7 +576,7 @@ The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and 
 
 ## Configuration
 
-Marid reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
+Hundredfold reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
 
 ```yaml
 gateway:
@@ -627,13 +627,13 @@ logging:
 - **Plugins** live in `~/.jinn/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
 - **Behind a reverse proxy or tunnel**, the proxy must preserve `Host`, or pass the host the browser dialled in `X-Forwarded-Host`. The gateway's WebSockets (the live event stream `/ws`, plugin event sockets and terminals) refuse a browser whose `Origin` is not the gateway's own host, so a proxy that rewrites `Host` and forwards neither leaves the dashboard without live updates. A Cloudflare tunnel's default ingress preserves `Host`; don't set `httpHostHeader` on it. Sign-in rate limiting also needs to know the real client behind a proxy: set `gateway.trustedProxies` (and, for some tunnels, `gateway.clientIpHeader`); see [`docs/behind-a-proxy.md`](docs/behind-a-proxy.md).
 
-Everything is human-readable and yours to edit. After upgrading, the gateway re-syncs the skills Marid ships on boot (see the upgrade note under Quickstart). An edit to a shipped skill is replaced then, with the previous copy kept in a backup, so customize by writing a skill of your own. Skills you wrote, `CLAUDE.md`, `docs/`, `knowledge/` and `org/` are left as they are.
+Everything is human-readable and yours to edit. After upgrading, the gateway re-syncs the skills Hundredfold ships on boot (see the upgrade note under Quickstart). An edit to a shipped skill is replaced then, with the previous copy kept in a backup, so customize by writing a skill of your own. Skills you wrote, `CLAUDE.md`, `docs/`, `knowledge/` and `org/` are left as they are.
 
 ---
 
 ## Roadmap
 
-Marid is in active beta. Shipped recently in upstream Jinn:
+Hundredfold is in active beta. Shipped recently in upstream Jinn:
 
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
 - **Isolated workspaces** with separate homes, ports, access settings, and authentication.
@@ -651,11 +651,11 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Development
 
-Marid is a pnpm + turbo monorepo.
+Hundredfold is a pnpm + turbo monorepo.
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
-cd marid
+git clone https://github.com/hundredfoldhq/hundredfold.git
+cd hundredfold
 pnpm install
 pnpm setup   # one-time: builds all packages and creates ~/.jinn
 pnpm dev     # gateway (:7777) + Vite dev server (:5173) with hot reload
@@ -684,7 +684,7 @@ vitest two workers.
 
 ## License
 
-[MIT](LICENSE). Copyright (c) 2026 Jinn Contributors, and (c) 2026 Marid contributors for the changes made in this fork. See [NOTICE](NOTICE) for attribution.
+[MIT](LICENSE). Copyright (c) 2026 Jinn Contributors, and (c) 2026 Hundredfold contributors for the changes made in this fork. See [NOTICE](NOTICE) for attribution.
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Jinn",
+  "productName": "Hundredfold",
   "version": "0.1.0",
   "identifier": "run.jinn.shell",
   "build": {

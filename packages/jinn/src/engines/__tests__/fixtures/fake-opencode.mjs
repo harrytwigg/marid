@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// A stand-in for the opencode CLI, speaking exactly the surface Jinn uses
+// A stand-in for the opencode CLI, speaking exactly the surface Hundredfold uses
 // (shapes taken from opencode 1.18.31's own OpenAPI document and event stream):
 //   serve --port P --hostname H     HTTP API with basic auth, SSE on /event
 //   run [...]                       a plain turn (the `run` mode / fallback)
 //   attach URL [-s ses]             the TUI as a client
-// It models what Jinn relies on, as observed on the real server: a prompt is
+// It models what Hundredfold relies on, as observed on the real server: a prompt is
 // posted under a client-supplied message id; each step of the reply is an
 // assistant message whose parentID is that id; prompts queue per session and
 // run in one busy period; and an abort that lands before a prompt is picked up
@@ -22,7 +22,7 @@
 //               question tool off) and waits for it
 //   CHILDQ      a sub-session of the turn asks a question and waits for it
 //   FAIL        the turn ends with a session.error
-//   DRIFT       the stream carries parts in a shape Jinn does not know, while
+//   DRIFT       the stream carries parts in a shape Hundredfold does not know, while
 //               the stored message holds the real answer (an API change)
 //   NOIDLE      the turn ends with no signal at all on the stream: no final
 //               message.updated, no idle status, no session.idle
@@ -38,7 +38,7 @@
 //               then answers `earlier:<that request's text>`. Unless the prompt
 //               carries a synthetic part saying that request was cancelled
 //: then, as the real model did in every live probe, it
-//               answers its own prompt as usual. A request Jinn recorded on a
+//               answers its own prompt as usual. A request Hundredfold recorded on a
 //               stopped prompt's metadata is what such a notice quotes.
 //   IGNORENOTICE  with EARLIER: take the previous request up even so
 //   ORPHAN      the reply is left as a server killed mid-reply leaves it: never
@@ -81,7 +81,7 @@
 //   COPYAFTERABORT  a retry status an hour off, then the session is aborted (the reply
 //               closes with nothing written and no error; idle), and 300 ms later
 //               another client posts the prompt's text as a NEW user message, with
-//               no Jinn metadata, whose reply answers and runs until aborted
+//               no Hundredfold metadata, whose reply answers and runs until aborted
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -578,7 +578,7 @@ function serve() {
     }
     m = url.match(/^\/session\/([^/]+)\/message$/);
     if (m && req.method === "POST") {
-      // Only the `noReply` form Jinn uses: store the user message, answer none.
+      // Only the `noReply` form Hundredfold uses: store the user message, answer none.
       const id = decodeURIComponent(m[1]);
       const s = sessions.get(id);
       if (!s) return send({ name: "NotFoundError" }, 404);

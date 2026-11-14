@@ -114,7 +114,7 @@ export function ensureAntigravityJinnMcpConfig(
 
   const servers = isRecord(config.mcpServers) ? { ...config.mcpServers } : {};
   if (servers[name] !== undefined && !isManagedJinnServer(servers[name])) {
-    logger.warn(`Antigravity MCP attach skipped: ${configPath} already has a non-Jinn-managed "${name}" server.`);
+    logger.warn(`Antigravity MCP attach skipped: ${configPath} already has a non-Hundredfold-managed "${name}" server.`);
     return { attached: false, reason: "non-managed jinn server exists" };
   }
   // An entry this program wrote under the other reserved name is stale once the instance registers under this one.

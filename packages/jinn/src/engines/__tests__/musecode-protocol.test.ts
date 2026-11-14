@@ -48,8 +48,8 @@ describe("museReasoningEffort", () => {
 
 describe("buildMusecodePrompt", () => {
   it("is opencode's prompt: the system prompt on a fresh session only, attachments named", () => {
-    const fresh = { prompt: "do it", cwd: "/w", systemPrompt: "You are Marid.", attachments: ["/a.txt"] };
-    expect(buildMusecodePrompt(fresh)).toBe("You are Marid.\n\n---\n\ndo it\n\nAttached files:\n- /a.txt");
+    const fresh = { prompt: "do it", cwd: "/w", systemPrompt: "You are Hundredfold.", attachments: ["/a.txt"] };
+    expect(buildMusecodePrompt(fresh)).toBe("You are Hundredfold.\n\n---\n\ndo it\n\nAttached files:\n- /a.txt");
     expect(buildMusecodePrompt(fresh)).toBe(buildOpencodePrompt(fresh));
     expect(buildMusecodePrompt({ ...fresh, resumeSessionId: "s" })).toBe("do it\n\nAttached files:\n- /a.txt");
   });

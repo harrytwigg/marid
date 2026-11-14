@@ -1,5 +1,5 @@
 /**
- * Marid's command ceiling for OpenCode 2 (staged by Marid in every session's
+ * Hundredfold's command ceiling for OpenCode 2 (staged by Hundredfold in every session's
  * config; see docs/engines-opencode.md, "Command timeout").
  *
  * OpenCode 2's `shell` tool takes a `timeout` the model chooses: 120 s by
@@ -13,7 +13,7 @@
  * the turn, and a dev server is meant to keep running.
  */
 export default {
-  id: "marid-command-timeout",
+  id: "hundredfold-command-timeout",
   setup: async (ctx) => {
     const ceiling = Number(process.env.JINN_OPENCODE_COMMAND_TIMEOUT_MS);
     if (!(ceiling > 0)) return;

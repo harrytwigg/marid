@@ -2,7 +2,7 @@ import { record, str, type V2Message } from "./opencode-v2-events.js";
 import { jinnSessionNotes, withJinnSessionNotes, type JinnSessionNotes } from "./opencode-v2-history.js";
 
 /**
- * The OpenCode 2 server API (`/api/*`) as Jinn uses it. Verified on 2.0.29.
+ * The OpenCode 2 server API (`/api/*`) as Hundredfold uses it. Verified on 2.0.29.
  *
  * The same server process, password and ssh forward as 1.x (`opencode serve
  * --port N --hostname 127.0.0.1`, HTTP basic auth as `opencode` with
@@ -172,7 +172,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Change the notes Jinn keeps on a session (see opencode-v2-history.ts):
+/** Change the notes Hundredfold keeps on a session (see opencode-v2-history.ts):
  *  read its metadata, apply `change`, write the whole of it back. */
 export async function v2UpdateSessionNotes(
   server: V2Endpoint,

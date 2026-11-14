@@ -135,7 +135,7 @@ export class OpencodeV2ServerCompaction {
     throw new Error("the event stream closed before the compaction finished");
   }
 
-  /** Have the next turn put Jinn's system prompt back in front of the model.
+  /** Have the next turn put Hundredfold's system prompt back in front of the model.
    *  Best effort: a failure costs the persona until the session's next fresh
    *  start, not the compaction, and is logged loudly. */
   private async reseed(sessionId: string): Promise<void> {

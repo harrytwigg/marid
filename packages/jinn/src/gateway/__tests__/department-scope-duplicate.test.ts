@@ -5,7 +5,7 @@ import { call, sessionOf, startScopedHarness } from "./department-scope-harness.
 /**
  * Duplicating a session forks its engine thread by resuming it, and Claude Code looks the
  * thread up by cwd. A scoped session ran in its department's stage directory, so the
- * fork runs there too (FR-020b); anyone else's runs in the Jinn home.
+ * fork runs there too (FR-020b); anyone else's runs in the Hundredfold home.
  */
 
 const forks = vi.hoisted(() => [] as Array<{ engineSessionId: string; cwd: string; scopedSession?: boolean }>);
@@ -37,7 +37,7 @@ describe("POST /api/sessions/:id/duplicate", () => {
     fs.rmSync(departmentStageDir("side-project"), { recursive: true, force: true });
   });
 
-  it("forks an unscoped session in the Jinn home, on the gateway's environment", async () => {
+  it("forks an unscoped session in the Hundredfold home, on the gateway's environment", async () => {
     const { JINN_HOME } = await import("../../shared/paths.js");
     const response = await duplicate("eng-dev", "open-thread");
     expect(response.status).toBe(200);

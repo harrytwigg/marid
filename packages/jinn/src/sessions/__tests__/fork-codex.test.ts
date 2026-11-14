@@ -7,7 +7,7 @@ import os from "node:os";
  * Tests for forkCodexSession() in ../fork.ts.
  *
  * forkCodexSession defaults to ~/.codex/sessions, deriving the root from
- * os.homedir(), but accepts explicit roots for Jinn's per-session Codex homes.
+ * os.homedir(), but accepts explicit roots for Hundredfold's per-session Codex homes.
  * We keep every path under a throwaway temp dir. The dest layout is:
  *   <home>/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-<ts>-<uuid>.jsonl
  * (year/month/day are UTC-derived in fork.ts).

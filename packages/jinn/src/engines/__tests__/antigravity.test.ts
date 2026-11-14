@@ -62,7 +62,7 @@ describe.skipIf(!process.env.AGY_E2E)("AntigravityEngine (e2e: real agy)", () =>
 /**
  * Antigravity reads MCP server specs from Gemini config; the session id and
  * bound capability stay per-process in the agy child env. This seam pins both:
- * full env inheritance for agy's own auth plus explicit Jinn caller identity.
+ * full env inheritance for agy's own auth plus explicit Hundredfold caller identity.
  */
 describe("buildAntigravityPtyEnv", () => {
   it("inherits JINN_GATEWAY_TOKEN and JINN_GATEWAY_URL from the gateway process env", async () => {

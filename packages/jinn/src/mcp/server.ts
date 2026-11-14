@@ -69,7 +69,7 @@ function serverLog(message: string): void {
  * GRS-012b + GRS-015 — the `jinn` MCP server.
  *
  * A minimal, hand-rolled MCP stdio server (JSON-RPC 2.0, newline-delimited) that
- * exposes typed Jinn company tools to any MCP-capable engine (Claude / Codex /
+ * exposes typed Hundredfold company tools to any MCP-capable engine (Claude / Codex /
  * Hermes / Grok). It is a *thin HTTP client
  * to the local gateway* — it holds no state of its own (no org model, scheduler,
  * memory store, or session engine) and simply calls the same

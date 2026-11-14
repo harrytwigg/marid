@@ -12,8 +12,8 @@ import { OpencodeServerPool } from "../opencode-server.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 
 /**
- * e2e: Jinn's server mode against a real OpenCode 2 server (`/api/*`), with a
- * mock OpenAI-compatible provider. One Jinn session, several turns: an
+ * e2e: Hundredfold's server mode against a real OpenCode 2 server (`/api/*`), with a
+ * mock OpenAI-compatible provider. One Hundredfold session, several turns: an
  * answer, a resume, a tool call, an MCP tool call, a model switch, a stop and
  * what the next turn is told about it, and a compaction with its re-seed. Then
  * the host plugin: a pre-stream 400 is retried in place.

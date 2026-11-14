@@ -1,4 +1,4 @@
-# OpenCode 2 plugin for a Marid host
+# OpenCode 2 plugin for a Hundredfold host
 
 One opencode plugin for hosts that run OpenCode 2 (2.0.28 or later): a plain ES
 module with no dependencies, because OpenCode 2 supplies `@opencode/plugin` to
@@ -10,7 +10,7 @@ starts, but without them.
 
 | File | Replaces (1.x) | What it does |
 |---|---|---|
-| `error-retry.js` | a 1.x `error-retry.js` built on `auth.loader` | Retries a pre-stream HTTP 400 whose body is exactly `{"model":"<id>"}` in place, up to `maxRetries` times with exponential backoff. It acts on one provider (`providerID`, default `opencode-go`). The step never fails, so Marid's turn only sees it take longer. Any other 400, and every other status, is left alone. |
+| `error-retry.js` | a 1.x `error-retry.js` built on `auth.loader` | Retries a pre-stream HTTP 400 whose body is exactly `{"model":"<id>"}` in place, up to `maxRetries` times with exponential backoff. It acts on one provider (`providerID`, default `opencode-go`). The step never fails, so Hundredfold's turn only sees it take longer. Any other 400, and every other status, is left alone. |
 
 ## Model fallback is not a plugin any more
 

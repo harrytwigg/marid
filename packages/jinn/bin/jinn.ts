@@ -81,7 +81,7 @@ program
   .description("Start the gateway daemon")
   .option("--daemon", "Run in background")
   .option("-p, --port <port>", "Override the gateway port from config")
-  .option("--take-port", "Take over a port owned by another Marid instance")
+  .option("--take-port", "Take over a port owned by another Hundredfold instance")
   .action(async (opts) => {
     const { runStart } = await import("../src/cli/start.js");
     await runStart({ daemon: opts.daemon, port: opts.port ? parseInt(opts.port, 10) : undefined, takePort: opts.takePort });
@@ -91,7 +91,7 @@ program
   .command("stop")
   .description("Stop the gateway daemon")
   .option("-p, --port <port>", "Port to kill the process on (default: from config or 7777)")
-  .option("--take-port", "Stop a process on the target port even when it belongs to another Marid instance")
+  .option("--take-port", "Stop a process on the target port even when it belongs to another Hundredfold instance")
   .action(async (opts: { port?: string; takePort?: boolean }) => {
     const { runStop } = await import("../src/cli/stop.js");
     await runStop(opts.port ? parseInt(opts.port, 10) : undefined, { takePort: opts.takePort });
@@ -100,7 +100,7 @@ program
 program
   .command("restart")
   .description("Restart the gateway (detached — safe to run from inside a session)")
-  .option("--take-port", "Take over a port owned by another Marid instance")
+  .option("--take-port", "Take over a port owned by another Hundredfold instance")
   .action(async (opts: { takePort?: boolean }) => {
     const { runRestart } = await import("../src/cli/restart.js");
     await runRestart({ takePort: opts.takePort });
@@ -145,7 +145,7 @@ program
 
 program
   .command("create <name>")
-  .description("Create a new Marid instance")
+  .description("Create a new Hundredfold instance")
   .option("-p, --port <port>", "Set gateway port (auto-assigned if omitted)")
   .action(async (name: string, opts: { port?: string }) => {
     const { runCreate } = await import("../src/cli/create.js");
@@ -154,7 +154,7 @@ program
 
 program
   .command("list")
-  .description("List all Marid instances")
+  .description("List all Hundredfold instances")
   .action(async () => {
     const { runList } = await import("../src/cli/list.js");
     await runList();
@@ -162,7 +162,7 @@ program
 
 program
   .command("remove <name>")
-  .description("Remove a Marid instance from the registry")
+  .description("Remove a Hundredfold instance from the registry")
   .option("--force", "Also delete the instance home directory")
   .action(async (name: string, opts: { force?: boolean }) => {
     const { runRemove } = await import("../src/cli/remove.js");
@@ -171,7 +171,7 @@ program
 
 program
   .command("nuke [name]")
-  .description("Permanently delete a Marid instance and all its data")
+  .description("Permanently delete a Hundredfold instance and all its data")
   .action(async (name?: string) => {
     const { runNuke } = await import("../src/cli/nuke.js");
     await runNuke(name);
@@ -179,7 +179,7 @@ program
 
 program
   .command("migrate")
-  .description("Sync the skills Marid ships into this instance and report what changed")
+  .description("Sync the skills Hundredfold ships into this instance and report what changed")
   .action(async () => {
     const { runMigrate } = await import("../src/cli/migrate.js");
     await runMigrate();

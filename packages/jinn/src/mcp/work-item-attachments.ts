@@ -24,7 +24,7 @@ import { ATTACHMENT_MAX_BYTES, ATTACHMENTS_SUBDIR, attachmentRelativePath } from
  * must be absolute (or `~/`, this host's home). A relative one is refused: the
  * agent's shell may have changed directory since this server started, and any
  * other anchor (the instance home) would silently resolve a repo's `docs/x.md`
- * to Jinn's own copy — the same wrong-file failure. The route's JSON mode stays
+ * to Hundredfold's own copy — the same wrong-file failure. The route's JSON mode stays
  * for other HTTP callers.
  *
  * READ — each listed row keeps the gateway's `storagePath` and gains

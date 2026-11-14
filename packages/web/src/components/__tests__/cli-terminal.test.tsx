@@ -351,7 +351,7 @@ describe("CliTerminal input", () => {
       expect(container.querySelector('[data-cli-terminal="interactive"]')).toBeTruthy();
     });
 
-    it("sends keystrokes, pastes and mouse reports as input frames, never as a Jinn turn", () => {
+    it("sends keystrokes, pastes and mouse reports as input frames, never as a Hundredfold turn", () => {
       render(<CliTerminal sessionId="session-1" />);
       const ws = openReady();
       const term = terminal();

@@ -8,7 +8,7 @@ vi.mock("@/lib/search-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/search-api")>()
   return { ...actual, searchGlobal: mocks.searchGlobal }
 })
-vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { portalName: "Jinn" } }) }))
+vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { portalName: "Hundredfold" } }) }))
 
 import { renderOverlay, searchField } from "./harness"
 import { facet, searchResponse, searchResult } from "./fixtures"

@@ -1,8 +1,8 @@
 import { record, str, type V2Message } from "./opencode-v2-events.js";
 
 /**
- * What an OpenCode 2 session's history says a Jinn turn must know before it
- * posts, and what Jinn keeps on the session for the next turn to say.
+ * What an OpenCode 2 session's history says a Hundredfold turn must know before it
+ * posts, and what Hundredfold keeps on the session for the next turn to say.
  *
  * Requests the operator cancelled in opencode's own terminal: the 1.x turn has
  * the long version of why (`cancelledRequests` in opencode-server-turn.ts): a
@@ -16,17 +16,17 @@ import { record, str, type V2Message } from "./opencode-v2-events.js";
  * Notes for the next turn: 2.x cannot change a message once it is delivered,
  * and an input queued for later is not passive context either (each delivered
  * input, a synthetic one included, gets a model step of its own; 2.0.29). So
- * what the next turn must tell the model (a Jinn prompt the user stopped, a
+ * what the next turn must tell the model (a Hundredfold prompt the user stopped, a
  * compaction that summarized the system prompt away) is kept in the session's
  * own metadata, under `jinn`, and the next turn puts it in front of its prompt.
  */
 
-/** Metadata on every prompt Jinn posts; `notice` when it carried notes. */
+/** Metadata on every prompt Hundredfold posts; `notice` when it carried notes. */
 export const JINN_V2_PROMPT_METADATA = { jinn: "prompt" } as const;
 
-/** What Jinn keeps on a session for its next turn. */
+/** What Hundredfold keeps on a session for its next turn. */
 export interface JinnSessionNotes {
-  /** Jinn prompts the user stopped, oldest first. */
+  /** Hundredfold prompts the user stopped, oldest first. */
   stopped: string[];
   /** A compaction summarized the system prompt away: send it again. */
   reseed: boolean;
@@ -47,12 +47,12 @@ export function withJinnSessionNotes(metadata: Record<string, unknown> | undefin
   return Object.keys(kept).length ? { ...rest, jinn: kept } : rest;
 }
 
-/** An item Jinn posted. */
+/** An item Hundredfold posted. */
 export function isJinnItem(message: V2Message): boolean {
   return record(message.metadata)?.jinn !== undefined;
 }
 
-/** A Jinn prompt that carried notes: everything cancelled before it was named. */
+/** A Hundredfold prompt that carried notes: everything cancelled before it was named. */
 function carriedNotice(message: V2Message): boolean {
   return message.type === "user" && record(message.metadata)?.notice === true;
 }
@@ -67,9 +67,9 @@ function carriedNotice(message: V2Message): boolean {
  * - one that ended other than `interrupted` ends the walk: what ran in it was
  *   answered, or failed some other way;
  * - in one that was interrupted, each request the operator sent is collected,
- *   and each Jinn item is stepped over (Jinn stops its own turns for reasons
+ *   and each Hundredfold item is stepped over (Hundredfold stops its own turns for reasons
  *   that are not the user's: a restart, a timeout, a new message);
- * - a Jinn prompt that carried a notice ends the walk: everything older was
+ * - a Hundredfold prompt that carried a notice ends the walk: everything older was
  *   named there once, and the model still has it in front of it.
  */
 export function cancelledV2Requests(newestFirst: V2Message[], sessionRunning: boolean): string[] {

@@ -33,7 +33,7 @@ export function resolveDeepLink(sp: URLSearchParams): DeepLink {
 // `/?session=<id>`. User-initiated selections PUSH a history entry; system-
 // initiated ones (auto-select, tab restore/close fallout, session-created)
 // REPLACE. Thread drill-ins additionally carry their origin in history state
-// (`{ from: ThreadOrigin }`), rendered as the in-app back chip — Jinn ships in
+// (`{ from: ThreadOrigin }`), rendered as the in-app back chip — Hundredfold ships in
 // chrome-less Tauri shells, so every drill-in needs an in-app way back while
 // browser back keeps working on the web.
 // ---------------------------------------------------------------------------

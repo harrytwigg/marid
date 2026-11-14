@@ -58,7 +58,7 @@ export interface JinnMcpContext {
  */
 export const GATEWAY_TIMEOUT_MS = 30_000;
 
-/** A Jinn MCP tool. `handler` throws `JinnMcpToolError` (or any Error) on failure;
+/** A Hundredfold MCP tool. `handler` throws `JinnMcpToolError` (or any Error) on failure;
  *  the dispatcher converts that into an MCP `isError` tool result. */
 export interface JinnMcpTool {
   name: string;

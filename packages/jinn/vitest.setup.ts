@@ -15,7 +15,7 @@ assertIsolatedClaudeConfigDir(process.env.CLAUDE_CONFIG_DIR);
 
 /**
  * Scrub gateway/engine env that leaks in when the suite runs from inside a live
- * Jinn session — the common case on the operator's machine, where a Claude PTY
+ * Hundredfold session — the common case on the operator's machine, where a Claude PTY
  * exports these into every child process.
  *
  * Same isolation boundary and same failure class as the JINN_HOME leak: the

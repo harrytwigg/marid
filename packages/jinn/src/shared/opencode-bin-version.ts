@@ -5,7 +5,7 @@ import { buildEngineChildEnv } from "./child-env.js";
 /**
  * Which opencode release a local binary is, from `opencode --version`.
  *
- * OpenCode 2 changes what Jinn must hand the binary before it starts: the
+ * OpenCode 2 changes what Hundredfold must hand the binary before it starts: the
  * staged MCP config's shape, `--standalone` for anything that would otherwise
  * start its background service, and the terminal view's argv. So the version
  * is read from the binary itself, once per binary file: the answer is cached

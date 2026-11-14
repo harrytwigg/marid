@@ -59,7 +59,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
 
   // If a gateway is already running, `start` becomes a clean restart. Prefer
   // asking the gateway to spawn the helper itself; when this CLI is running
-  // inside a Jinn session, that keeps the restart handoff out of the engine
+  // inside a Hundredfold session, that keeps the restart handoff out of the engine
   // process tree that the old gateway is about to interrupt. Both look at the
   // port this start targets, never the configured one --port replaced.
   if (getStatus(port).running) {

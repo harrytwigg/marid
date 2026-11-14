@@ -10,7 +10,7 @@ import { matchesReceiptlessRetiredSkill, receiptlessRetiredSkillNames } from "./
 import { stampVersionInYaml } from "./version-marker.js"
 import { LEGACY_RECEIPT_FILE, RECEIPT_FILE } from "./receipt-names.js"
 
-/** The names Jinn shipped the last time it synced. The template alone says which
+/** The names Hundredfold shipped the last time it synced. The template alone says which
  *  skills ship *now*, so without this record a retired skill and a skill the user
  *  wrote themselves look identical, and only one of them may be deleted. */
 const BACKUP_ROOT = ".migration-backups"
@@ -52,7 +52,7 @@ interface SyncPlan {
 }
 
 /**
- * Bring every skill Jinn ships back to the template, add the new ones, and drop the
+ * Bring every skill Hundredfold ships back to the template, add the new ones, and drop the
  * retired ones. Anything the template does not ship — a skill the user wrote, `org/`,
  * `knowledge/`, `CLAUDE.md`, `config.yaml` values, `skills.json` — is left alone.
  *

@@ -45,8 +45,8 @@ export function assertContainerPrimaryCommand(
   if (targetsPrimary) return;
 
   throw new Error(
-    "The Docker image supports one Jinn instance at its primary container home. "
+    "The Docker image supports one Hundredfold instance at its primary container home. "
     + "Do not retarget setup/start with -i, JINN_INSTANCE, or JINN_HOME; run another instance "
-    + "in its own container with dedicated Jinn/Claude volumes and a separately published port.",
+    + "in its own container with dedicated Hundredfold/Claude volumes and a separately published port.",
   );
 }

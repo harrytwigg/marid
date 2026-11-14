@@ -6,7 +6,7 @@ import { logger } from "../shared/logger.js";
 /**
  * Finding an opencode internal model fallback on a host.
  *
- * Marid owns fallback (docs/fallback-chains.md): opencode runs without one of
+ * Hundredfold owns fallback (docs/fallback-chains.md): opencode runs without one of
  * its own. A host can still carry one the operator installed, either the
  * `opencode-rate-limit` plugin or a `model-fallback.js` plugin file, driven by
  * a `rate-limit-fallback.json`. Such a plugin moves a turn to another model

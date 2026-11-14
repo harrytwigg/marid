@@ -28,7 +28,7 @@ export const VIEW_CLOSE_GRACE_MS = 60_000;
  *  created as soon as the server answers, so this is only ever a bound. */
 export const FIRST_SESSION_WAIT_MS = 15_000;
 export const HELD_FOR_TURN_NOTICE =
-  "A Jinn turn is running in this session; your message will be sent to it when the turn finishes.";
+  "A Hundredfold turn is running in this session; your message will be sent to it when the turn finishes.";
 const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
 
 interface View {
@@ -62,10 +62,10 @@ export interface OpencodeInteractiveDeps {
  *
  * Text sent from the dashboard's composer goes to the server's API rather than
  * being typed into the TUI, which is less fragile than driving a line editor
- * over a PTY. While a Jinn turn is running in the session it is HELD, and sent
+ * over a PTY. While a Hundredfold turn is running in the session it is HELD, and sent
  * when the turn ends: opencode would otherwise run it inside the turn's busy
  * period, delaying the turn's end behind the operator's prompt. Either way the
- * prompt runs in opencode's session and is NOT mirrored into the Jinn chat
+ * prompt runs in opencode's session and is NOT mirrored into the Hundredfold chat
  * transcript (a documented v1 limitation, as for codex and grok).
  *
  * Work turns are not routed through this class: `run` delegates to the
@@ -80,7 +80,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
   private closeTimers = new Map<string, NodeJS.Timeout>();
   private lastOpts = new Map<string, PtyIdleSpawnOpts>();
   private lastGeom = new Map<string, { cols: number; rows: number }>();
-  /** Composer text waiting for a Jinn turn in the session to end. */
+  /** Composer text waiting for a Hundredfold turn in the session to end. */
   private held = new Map<string, string[]>();
   /** Views waiting for a running turn to name its opencode session. */
   private sessionWaiters = new Map<string, Array<() => void>>();
@@ -104,7 +104,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       this.wakeSessionWaiters(id);
       this.closeView(id);
     });
-    // A Jinn turn ended: send what the operator typed while it ran.
+    // A Hundredfold turn ended: send what the operator typed while it ran.
     work.onServerTurnEnd((id) => {
       this.wakeSessionWaiters(id);
       this.releaseHeld(id);

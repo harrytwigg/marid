@@ -4,6 +4,7 @@ import { logger } from "../shared/logger.js";
 import { getSession, insertMessage } from "../sessions/registry.js";
 import type { TurnReceipt, TurnSurface } from "../sessions/turn/types.js";
 import { deliverConnectorReply } from "./connector-reply.js";
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 export interface WebTurnSurfaceOptions {
   sessionId: string;
@@ -71,7 +72,7 @@ export function createWebTurnSurface(options: WebTurnSurfaceOptions): TurnSurfac
     async settled(receipt: TurnReceipt) {
       emit("session:completed", {
         sessionId,
-        employee: receipt.session.employee || options.getConfig().portal?.portalName || "Jinn",
+        employee: receipt.session.employee || options.getConfig().portal?.portalName || LEGACY_PORTAL_NAME,
         title: receipt.session.title,
         result: receipt.result,
         error: receipt.error,

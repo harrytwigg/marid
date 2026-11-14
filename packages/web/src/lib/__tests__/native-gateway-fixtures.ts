@@ -45,7 +45,7 @@ export function bridgeFixture() {
     runtime: "tauri",
     pair: vi.fn(async ({ target }) => ({
       origin: new URL(target.origin).origin,
-      device: { id: `device:${new URL(target.origin).port}`, name: "Jinn shell" },
+      device: { id: `device:${new URL(target.origin).port}`, name: "Hundredfold shell" },
     })),
     request: requests,
     stream: vi.fn(async (input: NativeStreamInput, onEvent) => {

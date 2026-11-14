@@ -17,6 +17,7 @@
 import { resolveOrgHierarchy } from "../../gateway/org-hierarchy.js";
 import type { Employee, JinnConfig, OrgHierarchy } from "../../shared/types.js";
 import { resolveTodoIdPrefix } from "../../work-items/id.js";
+import { LEGACY_PORTAL_NAME } from "../../shared/brand.js";
 
 /** ~750 tokens at the four-chars-per-token estimate in `context.ts`. Sent once
  *  per `session.update`, against a turn budget of `TALK_CONTEXT_BUDGET_TOKENS`
@@ -43,13 +44,13 @@ export interface StandingBrief {
 }
 
 const POSTURE =
-  "You are the voice of this Jinn instance: the operator's COO-grade assistant, not a chatbot. "
+  "You are the voice of this Hundredfold instance: the operator's COO-grade assistant, not a chatbot. "
   + "You already know this company, so answer from what follows and reach for a tool only when you need something live. "
   + "Lead with the answer and keep it short. Anything outward-facing — a message sent, a change committed, money spent — "
   + "gets the situation stated plainly first and the operator's go-ahead before it happens.";
 
 const WHAT_JINN_IS =
-  "Jinn is a self-hosted gateway that runs a company of AI employees. One process holds the org, "
+  "Hundredfold is a self-hosted gateway that runs a company of AI employees. One process holds the org, "
   + "routes work to engine sessions, runs scheduled jobs, and serves the web UI the operator is looking at.";
 
 const BLOCKS = [
@@ -63,7 +64,7 @@ const BLOCKS = [
 /** The company's own name, prefix and statuses. Fixed-size by construction: the
  *  only variable parts are the clipped company name and a three-letter prefix. */
 function identity(config: Pick<JinnConfig, "portal">): string {
-  const configured = config.portal?.companyName ?? "Jinn";
+  const configured = config.portal?.companyName ?? LEGACY_PORTAL_NAME;
   const prefix = resolveTodoIdPrefix(configured, config.portal?.companyPrefix);
   return (
     `This instance is ${configured.slice(0, COMPANY_NAME_CHARS)}. `

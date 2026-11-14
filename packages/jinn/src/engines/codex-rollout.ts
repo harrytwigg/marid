@@ -2,7 +2,7 @@
  * Locating a Codex thread's rollout, and making it visible to a second session.
  *
  * Codex resumes a thread by reading its rollout JSONL out of `CODEX_HOME`, and
- * Jinn points every session at a home of its own. So handing a new session a
+ * Hundredfold points every session at a home of its own. So handing a new session a
  * thread id is not enough — without the rollout beside it, `codex exec resume`
  * finds nothing and quietly opens a fresh thread instead, which looks like a
  * resume and is not one.
@@ -39,7 +39,7 @@ export function findCodexSessionFile(root: string, threadId: string): string | n
   return null;
 }
 
-/** The rollout for `threadId` as the given Jinn session can see it, or null. */
+/** The rollout for `threadId` as the given Hundredfold session can see it, or null. */
 export function findCodexRollout(sessionId: string, threadId: string, baseDir?: string): string | null {
   for (const root of rolloutRoots(sessionId, baseDir)) {
     const found = findCodexSessionFile(root, threadId);

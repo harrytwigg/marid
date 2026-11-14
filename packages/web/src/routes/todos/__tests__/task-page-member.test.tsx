@@ -98,7 +98,7 @@ describe("the Todo page for a member", () => {
 
   it("offers a collaborator comments but no edit or close once an employee-made Todo is in the tree", async () => {
     principal = member("collaborator")
-    setup(full("PLT-1"), [full("PLT-2", { parentId: "PLT-1", createdBy: "marid-dev" })])
+    setup(full("PLT-1"), [full("PLT-2", { parentId: "PLT-1", createdBy: "hundredfold-dev" })])
     await screen.findByTestId("task-title")
     expect(screen.getByTestId("task-composer")).toBeTruthy()
     await waitFor(() => expect(screen.queryByTestId("subtask-row-PLT-2")).toBeTruthy())

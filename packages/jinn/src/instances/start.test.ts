@@ -45,7 +45,7 @@ describe("offline workspace start", () => {
       isPortAvailable: async () => true,
       waitForHealth: async () => true,
       provisionAccess: async () => ({ status: "not-detected" }),
-    })).rejects.toThrow(/Docker image supports one Jinn instance/i);
+    })).rejects.toThrow(/Docker image supports one Hundredfold instance/i);
     expect(execFile).not.toHaveBeenCalled();
   });
 

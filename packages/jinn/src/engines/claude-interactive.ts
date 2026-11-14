@@ -385,7 +385,7 @@ export function stripReasoningBlocks(text: string): string {
 }
 
 /** The Claude engine emits `<suggestion>…</suggestion>` — a model-generated *suggested
- *  next user turn*. Jinn has no producer or consumer for the tag, so it lands in stored
+ *  next user turn*. Hundredfold has no producer or consumer for the tag, so it lands in stored
  *  transcripts as `role: "assistant"` content, where another agent reading the session
  *  cannot tell it from an operator instruction. See issue #102.
  *
@@ -1611,7 +1611,7 @@ export function pasteAndSubmit(
 
 export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngine, BackgroundTasksSource {
   name = "claude" as const;
-  /** Active turn resolvers keyed by Jinn session id. `boundProc` is the specific
+  /** Active turn resolvers keyed by Hundredfold session id. `boundProc` is the specific
    *  PTY serving this turn (captured at spawn / warm-reuse). A PTY's onExit only
    *  interrupts the active resolver when it IS that bound proc — so a stale PTY
    *  released by a kill->respawn race can't poison the freshly-started turn.

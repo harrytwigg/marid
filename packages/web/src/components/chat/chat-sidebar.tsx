@@ -75,7 +75,7 @@ import {
 import { chatSessionDragProps } from "@/routes/chat/chat-session-dnd"
 import { TreeCollapsedCount, TreeLead, TreeMarker, treeRowPadding, type HiddenTreeSignal, type TreeRowMeta } from "@/components/chat/session-tree-row"
 import type { ChatSidebarProps } from "@/components/chat/chat-sidebar-types"
-import { PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME, LEGACY_PORTAL_NAME } from "@/lib/brand"
 
 export type { SidebarOrder } from "@/components/chat/chat-sidebar-types"
 
@@ -871,7 +871,7 @@ export function ChatSidebar({
   const { settings } = useSettings()
   const portalName = settings.portalName ?? PRODUCT_NAME
   // The slug matches session.employee, so it keeps the internal codename.
-  const portalSlug = (settings.portalName ?? "Jinn").toLowerCase()
+  const portalSlug = (settings.portalName ?? LEGACY_PORTAL_NAME).toLowerCase()
 
   const qc = useQueryClient()
   const { data: rawSessions, isLoading: loading } = useSessions()
@@ -1496,8 +1496,8 @@ export function ChatSidebar({
 
   const fixTitleCb = useCallback((title: string | undefined, employee: string | undefined) => {
     if (!title) return employee || portalName
-    if (portalName !== "Jinn" && title.startsWith("Jinn - ")) {
-      return portalName + title.slice(4)
+    if (portalName !== LEGACY_PORTAL_NAME && title.startsWith(`${LEGACY_PORTAL_NAME} - `)) {
+      return portalName + title.slice(LEGACY_PORTAL_NAME.length)
     }
     return title
   }, [portalName])

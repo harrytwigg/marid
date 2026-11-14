@@ -106,7 +106,7 @@ describe("work-item attachments from a session on another host", () => {
     await expect(tool("attach_to_work_item").handler({ id: item.id, path: absent }, ctx)).rejects.toThrow(/file not found/);
 
     // A relative name that also exists under the instance home (R3: a repo's
-    // docs/x.md must never become Jinn's own copy) — refused, not resolved.
+    // docs/x.md must never become Hundredfold's own copy) — refused, not resolved.
     fs.mkdirSync(path.join(process.env.JINN_HOME!, "uploads"), { recursive: true });
     fs.writeFileSync(path.join(process.env.JINN_HOME!, "uploads", "gen140-relative.txt"), "the instance home's copy");
     await expect(tool("attach_to_work_item").handler({ id: item.id, path: "uploads/gen140-relative.txt" }, ctx)).rejects.toThrow(
@@ -185,7 +185,7 @@ describe("work-item attachments from a session on another host", () => {
     const secret = path.join(process.env.JINN_HOME!, "secrets", "gen140.json");
     fs.mkdirSync(path.dirname(secret), { recursive: true });
     fs.writeFileSync(secret, "{}");
-    await expect(tool("attach_to_work_item").handler({ id: item.id, path: secret }, ctx)).rejects.toThrow(/Refusing to read Jinn secrets/);
+    await expect(tool("attach_to_work_item").handler({ id: item.id, path: secret }, ctx)).rejects.toThrow(/Refusing to read Hundredfold secrets/);
 
     const big = path.join(buildHost, "big.bin");
     fs.writeFileSync(big, "");

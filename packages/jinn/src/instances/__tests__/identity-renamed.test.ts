@@ -124,7 +124,7 @@ describe("one identity per instance", () => {
     const env = { JINN_CONTAINER: "1", _JINN_CONTAINER_SERVICE_START: "1", JINN_CONTAINER_PRIMARY_HOME: home, JINN_HOME: home, JINN_INSTANCE: "jinn" };
     expect(() => assertContainerPrimaryCommand("start", undefined, env)).not.toThrow();
     expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, JINN_INSTANCE: "acme" })).not.toThrow();
-    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, JINN_INSTANCE: "jinn-other" })).toThrow(/one Jinn instance/);
+    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, JINN_INSTANCE: "jinn-other" })).toThrow(/one Hundredfold instance/);
   });
 
   it("hints the pairing command by the current codename", () => {

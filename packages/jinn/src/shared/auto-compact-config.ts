@@ -38,7 +38,7 @@ export interface AutoCompactPolicy {
    * turn whether its cache is warm or cold. Undefined, the default, leaves a
    * warm session to the engine's own compaction, which waits for the model's
    * context ceiling (opencode's ignores its `compaction.reserved` unless the
-   * provider declares `limit.input`, so Jinn cannot lower it by config).
+   * provider declares `limit.input`, so Hundredfold cannot lower it by config).
    */
   maxContextTokens?: number;
 }

@@ -112,7 +112,7 @@ describe("the 2.x plugin", () => {
 
   it("caps a foreground shell command's timeout, 0 and none included, and leaves background ones alone", async () => {
     const { plugin, hook } = await hookWith("3000");
-    expect(plugin.id).toBe("marid-command-timeout");
+    expect(plugin.id).toBe("hundredfold-command-timeout");
     const call = async (tool: string, input: Record<string, unknown>) => {
       const event = { tool, input: { ...input } };
       await hook!(event);

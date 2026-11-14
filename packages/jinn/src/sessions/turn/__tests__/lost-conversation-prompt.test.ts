@@ -26,7 +26,7 @@ vi.mock("../../queue-item-registry.js", async (importOriginal) => ({
 import { LOST_CONVERSATION_META_KEY, resolveLostConversationPrompt, resolveTurnPrompt, withSyncMarkersCleared } from "../preflight.js";
 import { UNSEEN_INTERRUPTED_PROMPTS_META_KEY } from "../superseded.js";
 
-const INTRO = "The conversation this Jinn session was running could not be resumed, so this is a new one. "
+const INTRO = "The conversation this Hundredfold session was running could not be resumed, so this is a new one. "
   + "Sync your context with this transcript of the session (most recent last), then respond to the current message.";
 const at = (n: number) => Date.parse("2026-10-01T09:00:00Z") + n * 1000;
 const session = (transportMeta: Record<string, unknown> = {}) => ({ id: "s1", engine: "claude", transportMeta }) as unknown as Session;

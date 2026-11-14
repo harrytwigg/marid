@@ -141,7 +141,7 @@ describe.skipIf(process.platform === "win32")("Docker entrypoint runtime cleanup
     }
   });
 
-  it("keeps shared STT state inside the persisted Jinn home volume", () => {
+  it("keeps shared STT state inside the persisted Hundredfold home volume", () => {
     const source = fs.readFileSync(dockerfile, "utf-8");
 
     expect(source).toContain("ENV JINN_STT_SETTINGS=/home/node/.jinn/stt.json");

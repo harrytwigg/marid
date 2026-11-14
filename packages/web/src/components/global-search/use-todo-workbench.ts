@@ -31,7 +31,7 @@ export interface TodoWorkbench {
    *  optimistically and rolls back on refusal, which is what moves the result
    *  row and this preview together without a second patcher. */
   status: WorkItemStatusWire | undefined
-  /** The owner as the rest of Jinn writes it — the roster's display name, not
+  /** The owner as the rest of Hundredfold writes it — the roster's display name, not
    *  the employee key the wire carries. */
   assignee: string | null | undefined
   /** The detail is still on its way; the controls have nothing to act on yet. */
